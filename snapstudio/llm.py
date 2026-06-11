@@ -378,6 +378,58 @@ class LLMClient:
                 continue
         return None
 
+    def locate_worn_region(self, scene_image: Image.Image, product_desc: str,
+                           body_part: str = "手腕") -> list | None:
+        """VLM 看裸身體部位場景 → 回「產品該放的矩形框」(x0,y0,x1,y1，0-1000 正規化)。
+        比膚色 CV 可靠：VLM 懂手錶該戴腕部、比例約腕寬。失敗回 None（pipeline 退回膚色偵測）。"""
+        if not self._ensure_vision():
+            return None
+        prompt = (
+            f"這張圖是裸露的{body_part}（還沒戴任何東西）。我要把一個「{product_desc}」"
+            f"自然地放上去（像真的戴著/握著）。\n"
+            '只輸出 JSON：{"found": true, "box": [x0, y0, x1, y1]}\n'
+            "box＝該產品**應佔據的矩形**，座標 0-1000 正規化（左上 0,0、右下 1000,1000）。\n"
+            "★務必符合真實比例：例如手錶錶體寬度約等於手腕寬度，**不要佔滿整條手臂**；"
+            "框要正好對準該戴/握的部位。找不到合適部位回 {\"found\": false}。" + JSON_RULES
+        )
+        messages = [{"role": "user", "content": [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": _image_to_data_url(scene_image)}}]}]
+        for _ in range(3):
+            try:
+                raw = self._chat_once(self._ollama, config.OLLAMA_VISION_MODEL, messages, 0.2)
+                d = _extract_json(raw)
+                box = d.get("box")
+                if d.get("found") and isinstance(box, list) and len(box) == 4:
+                    return [float(v) for v in box]
+                return None
+            except Exception:
+                continue
+        return None
+
+    def judge_worn(self, result_image: Image.Image, product_desc: str) -> dict | None:
+        """VLM 評穿戴/手持成品：自然度/大小/位置/破綻 → 驅動重跑或收。失敗回 None。"""
+        if not self._ensure_vision():
+            return None
+        prompt = (
+            f"這是一張「{product_desc}」戴/握在身上的廣告圖。請當嚴格的廣告美術總監評估。\n"
+            '只輸出 JSON：{"score": 1-10, "size": "too_big｜ok｜too_small", '
+            '"placement": "ok｜off", "natural": true/false, "issues": ["..."]}\n'
+            "size＝產品相對身體部位的比例；placement＝有沒有戴/握在對的位置；"
+            "issues＝最該修的問題（繁體中文）。" + JSON_RULES
+        )
+        messages = [{"role": "user", "content": [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": _image_to_data_url(result_image)}}]}]
+        for _ in range(3):
+            try:
+                raw = self._chat_once(self._ollama, config.OLLAMA_VISION_MODEL, messages, 0.3)
+                d = _extract_json(raw)
+                return d if isinstance(d, dict) else None
+            except Exception:
+                continue
+        return None
+
     def plan_scenes(self, card: ProductCard, user_brief: str,
                     n: int = 3, lifestyle: bool = False,
                     mode: str = "locked") -> list[ScenePlan]:

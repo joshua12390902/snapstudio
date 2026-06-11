@@ -38,7 +38,23 @@ def placement_mask(size, cx=0.6, cy=0.42, rx=0.14, ry=0.22) -> Image.Image:
     return m
 
 
-def body_part_mask(scene_img: Image.Image, product_class: str = "wearable") -> Image.Image:
+def mask_from_box(size, box) -> Image.Image | None:
+    """VLM 回的 0-1000 正規化框 [x0,y0,x1,y1] → 橢圓擺放遮罩。框不合理回 None。"""
+    if not box or len(box) != 4:
+        return None
+    x0, y0, x1, y1 = [c / 1000.0 for c in box]
+    if not (0 <= x0 < x1 <= 1.001 and 0 <= y0 < y1 <= 1.001):
+        return None
+    if (x1 - x0) > 0.92 or (y1 - y0) > 0.92:  # 佔滿整張＝VLM 沒抓準，棄用
+        return None
+    w, h = size
+    m = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(m).ellipse([int(x0 * w), int(y0 * h), int(x1 * w), int(y1 * h)], fill=255)
+    return m
+
+
+def body_part_mask(scene_img: Image.Image, product_class: str = "wearable",
+                   scale: float = 0.5) -> Image.Image:
     """自動偵測場景裡的身體部位（膚色），把擺放遮罩對準它、依手臂寬度定大小、
     沿手臂方向定位（手錶/手環→腕部偏手端；其餘→部位中心）。偵測失敗退回固定中央。"""
     import cv2
@@ -66,7 +82,8 @@ def body_part_mask(scene_img: Image.Image, product_class: str = "wearable") -> I
             long_v = (-long_v[0], -long_v[1])
         cx += long_v[0] * step
         cy += long_v[1] * step
-    rad = arm_w * 0.62
+    # 產品案體比例由 scale 控制（VLM 判太大時 pipeline 會以更小的 scale 重跑）
+    rad = arm_w * scale
     m = np.zeros((h, w), np.uint8)
     cv2.ellipse(m, (int(cx), int(cy)), (int(rad), int(rad * 0.92)),
                 ang, 0, 360, 255, -1)

@@ -303,9 +303,9 @@ class SnapStudio:
                     scenes.append(self._reshape.generate_scene(sp, seed=seeds[i]))
                 # 2) 卸 RealVisXL 釋 VRAM → AnyDoor subprocess 自動擺放（朝向/光照/環繞）
                 self._reshape.unload(); self._reshape = None
-                self._notify(progress_cb, "AnyDoor 自動擺放（朝向/光照/環繞）", 0.62)
-                # 自動偵測每張場景的身體部位，把擺放遮罩對準它（取代固定中央）
+                # 膚色偵測身體部位定擺放遮罩（實測比 VLM bounding-box grounding 準）
                 masks = [wornplace.body_part_mask(s, product_class) for s in scenes]
+                self._notify(progress_cb, "AnyDoor 自動擺放（朝向/光照/環繞）", 0.62)
                 t0 = time.time()
                 try:
                     placed = wornplace.place_batch(fg, scenes, seeds, masks=masks)
@@ -315,9 +315,33 @@ class SnapStudio:
                 # 3) 把真實平面細節面（錶盤/標籤）合成回去 → 真實 logo
                 for i, p in enumerate(placed):
                     self._notify(progress_cb, f"真實細節合成 {i + 1}/{len(plans)}",
-                                 0.70 + 0.28 * i / n)
+                                 0.68 + 0.20 * i / n)
                     shots.append(composite_real_face(p, fg) if p is not None else scenes[i])
                     previews.append(fg)
+                # 4) VLM 裁判（定性=VLM強項）：判定「太大」的，自動以更小遮罩重跑一次
+                pdesc = card.name_guess or card.category or "產品"
+                self._notify(progress_cb, "VLM 品質裁判", 0.90)
+                retry = []  # (idx, scene, seed, smaller_mask)
+                for i, p in enumerate(placed):
+                    if p is None:
+                        continue
+                    v = self.llm.judge_worn(shots[i], pdesc)
+                    if v and v.get("size") == "too_big":
+                        retry.append((i, scenes[i], seeds[i],
+                                      wornplace.body_part_mask(scenes[i], product_class, scale=0.34)))
+                if retry:
+                    self.llm.release_models()  # 卸 VLM 再交給 AnyDoor subprocess
+                    self._notify(progress_cb,
+                                 f"VLM 判 {len(retry)} 張過大 → 縮小重跑", 0.94)
+                    try:
+                        re_placed = wornplace.place_batch(
+                            fg, [r[1] for r in retry], [r[2] for r in retry],
+                            masks=[r[3] for r in retry])
+                    except Exception:  # noqa: BLE001
+                        re_placed = [None] * len(retry)
+                    for (idx, *_), rp in zip(retry, re_placed):
+                        if rp is not None:
+                            shots[idx] = composite_real_face(rp, fg)
             else:
                 for i, plan in enumerate(plans):
                     self._notify(progress_cb,
