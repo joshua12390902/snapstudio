@@ -69,7 +69,14 @@ def body_part_mask(scene_img: Image.Image, product_class: str = "wearable",
     cnts = [c for c in cnts if cv2.contourArea(c) > 0.03 * h * w]
     if not cnts:
         return placement_mask((w, h))
-    c = max(cnts, key=cv2.contourArea)
+
+    # 選「最像肢體」的膚色塊：畫面裡最大的膚色往往是臉（細長比≈1），手臂則細長（≈2~5）。
+    # 以 細長比^1.5 × 面積^0.5 評分（要夠細長、也要夠大），避免把產品擺到臉上。
+    def _limb_score(c):
+        (_, _), (rw_, rh_), _ = cv2.minAreaRect(c)
+        elong = max(rw_, rh_) / max(1.0, min(rw_, rh_))
+        return (elong ** 1.5) * (cv2.contourArea(c) ** 0.5)
+    c = max(cnts, key=_limb_score)
     (cx, cy), (rw, rh), ang = cv2.minAreaRect(c)  # 手臂的旋轉外接矩形
     arm_w = max(8.0, min(rw, rh))                  # 手臂寬度（短邊）
     long_v = (np.cos(np.deg2rad(ang)), np.sin(np.deg2rad(ang)))
@@ -82,8 +89,11 @@ def body_part_mask(scene_img: Image.Image, product_class: str = "wearable",
             long_v = (-long_v[0], -long_v[1])
         cx += long_v[0] * step
         cy += long_v[1] * step
-    # 產品案體比例由 scale 控制（VLM 判太大時 pipeline 會以更小的 scale 重跑）
-    rad = arm_w * scale
+    # 尺寸用「畫面比例 × scale」而非肢寬：肢寬(arm_w)在粗手臂/近拍會量到大半張圖，
+    # 使遮罩撐到 50~75% 畫面、害 AnyDoor 對著大區塊複製出第二支錶＋超大產品（實測過）。
+    # 場景已固定「部位填滿畫面」，比例化才能泛化。scale=0.5→直徑≈22% 畫面（合理錶面）；
+    # VLM 判太大時 pipeline 以更小 scale 重跑，rad 才會真的變小。arm_w 只留作定位用。
+    rad = 0.22 * max(h, w) * scale
     m = np.zeros((h, w), np.uint8)
     cv2.ellipse(m, (int(cx), int(cy)), (int(rad), int(rad * 0.92)),
                 ang, 0, 360, 255, -1)

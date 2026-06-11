@@ -217,6 +217,9 @@ class SnapStudio:
         t_total = time.time()
         timings: dict = {}
 
+        # 先卸掉上一輪可能殘留在顯卡的 Ollama 模型（VLM 裁判跑完未必已釋放），
+        # 否則接著的 SAM2 去背會在滿載的 24GB 上 OOM、退回較糙的 rembg 邊緣。
+        self.llm.release_models(wait=True)
         self._notify(progress_cb, "去背中", 0.02)
         t0 = time.time()
         self._ensure_matting()
@@ -281,7 +284,8 @@ class SnapStudio:
         n = max(len(plans), 1)
 
         if resolved_mode == "reshape":
-            from .reshape import framing_for, composite_real_face, bare_scene_prompt
+            from .reshape import (framing_for, composite_real_face, bare_scene_prompt,
+                                  compact_reference, BARE_SCENE_NEGATIVE)
             from . import wornplace
             framing = framing_for(card, product_class)  # 取景由 VLM 決定（worn_framing）
             use_anydoor = wornplace.available()
@@ -300,15 +304,19 @@ class SnapStudio:
                     self._notify(progress_cb, f"生成裸場景 {i + 1}/{len(plans)}",
                                  0.30 + 0.30 * i / n)
                     sp = bare_scene_prompt(framing, plan.scene_prompt, card.category)
-                    scenes.append(self._reshape.generate_scene(sp, seed=seeds[i]))
+                    scenes.append(self._reshape.generate_scene(
+                        sp, negative_prompt=BARE_SCENE_NEGATIVE, seed=seeds[i]))
                 # 2) 卸 RealVisXL 釋 VRAM → AnyDoor subprocess 自動擺放（朝向/光照/環繞）
                 self._reshape.unload(); self._reshape = None
+                # AnyDoor 用「精簡參考」（裁到產品主面，去掉折疊錶帶等拖尾→不再生雙錶）；
+                # 真實細節仍由 composite_real_face 用完整 fg 補回。
+                ref_anydoor = compact_reference(fg)
                 # 膚色偵測身體部位定擺放遮罩（實測比 VLM bounding-box grounding 準）
                 masks = [wornplace.body_part_mask(s, product_class) for s in scenes]
                 self._notify(progress_cb, "AnyDoor 自動擺放（朝向/光照/環繞）", 0.62)
                 t0 = time.time()
                 try:
-                    placed = wornplace.place_batch(fg, scenes, seeds, masks=masks)
+                    placed = wornplace.place_batch(ref_anydoor, scenes, seeds, masks=masks)
                 except Exception:  # noqa: BLE001  # AnyDoor 失敗不可崩，退回裸場景
                     placed = [None] * len(scenes)
                 timings["anydoor"] = round(time.time() - t0, 2)
@@ -335,7 +343,7 @@ class SnapStudio:
                                  f"VLM 判 {len(retry)} 張過大 → 縮小重跑", 0.94)
                     try:
                         re_placed = wornplace.place_batch(
-                            fg, [r[1] for r in retry], [r[2] for r in retry],
+                            ref_anydoor, [r[1] for r in retry], [r[2] for r in retry],
                             masks=[r[3] for r in retry])
                     except Exception:  # noqa: BLE001
                         re_placed = [None] * len(retry)
@@ -371,7 +379,34 @@ class SnapStudio:
                     timings[f"{k}_{i + 1}"] = v
                 shots.append(shot)
                 previews.append(preview)
+            # VLM 品質把關（生圖也跟 VLM 溝通修正）：卸 inpaint→逐張判 AI 破綻→
+            # 有瑕疵就「換 seed＋把瑕疵加進負面詞」重生（自動化人工目視）
+            pdesc = card.name_guess or card.category or "產品"
+            self._notify(progress_cb, "VLM 品質把關", 0.86)
+            self._inpaint.unload(); self._inpaint = None
+            fixes = []
+            for i in range(len(plans)):
+                v = self.llm.judge_product_shot(shots[i], pdesc)
+                if v and v.get("needs_fix"):
+                    p2 = plans[i].model_copy()
+                    flaw = (v.get("flaw_terms") or "").strip()
+                    if flaw:
+                        p2.negative_prompt = (plans[i].negative_prompt + ", " + flaw).strip(", ")
+                    fixes.append((i, p2))
+            if fixes:
+                self.llm.release_models()  # 卸 VLM 再重載 inpaint
+                self._ensure_inpaint()
+                self._notify(progress_cb,
+                             f"VLM 判 {len(fixes)} 張有瑕疵 → 換 seed＋補負面詞重生", 0.94)
+                for i, p2 in fixes:
+                    fg_view = view_pool[i % len(view_pool)]
+                    s2, _, _ = self._render_plan(fg_view, p2, place_override,
+                                                 self.BASE_SEED + 1000 + i, harmonize,
+                                                 allow_people=lifestyle)
+                    shots[i] = s2
 
+        # 收尾：卸掉裁判階段載入的 Ollama VLM，讓顯卡乾淨交還（下一輪不必再清）。
+        self.llm.release_models()
         timings["total"] = round(time.time() - t_total, 2)
         self._notify(progress_cb, "完成", 1.0)
         return StudioResult(

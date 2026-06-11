@@ -32,5 +32,5 @@ LLM_BASE_URL = os.getenv("SNAPSTUDIO_LLM_BASE_URL", "https://opencode.ai/zen/v1"
 LLM_MODEL = os.getenv("SNAPSTUDIO_LLM_MODEL", "opencode/big-pickle")
 LLM_API_KEY = os.getenv("SNAPSTUDIO_LLM_API_KEY", os.getenv("OPENCODE_API_KEY", ""))
 OLLAMA_BASE_URL = os.getenv("SNAPSTUDIO_OLLAMA_BASE_URL", "http://localhost:11434/v1")
-OLLAMA_TEXT_MODEL = os.getenv("SNAPSTUDIO_OLLAMA_TEXT_MODEL", "qwen3:32b")
+OLLAMA_TEXT_MODEL = os.getenv("SNAPSTUDIO_OLLAMA_TEXT_MODEL", "qwen3:14b")
 OLLAMA_VISION_MODEL = os.getenv("SNAPSTUDIO_OLLAMA_VISION_MODEL", "qwen2.5vl:32b")

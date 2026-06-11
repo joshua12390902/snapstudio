@@ -181,14 +181,15 @@ def paste_back(generated: Image.Image, product: Image.Image,
             base_cx, base_y = (x0 + x1) // 2, y1
             dx = {"left": 1, "right": -1}.get(light_direction, 0.4)
             dark = Image.new("RGB", (cw, ch), (0, 0, 0))
-            # 第1層 投射影：中長橢圓往光反向（柔、淡）
+            # 第1層 投射影：極淡柔暈（只給微弱方向感，不形成第二條明顯影子，
+            # 避免與場景生成自己畫的陰影「重疊／雙影」）。範圍縮、不偏移、強模糊、低透明。
             cast = Image.new("L", (cw, ch), 0)
-            cl = int(pw * 1.25); co = int(dx * pw * 0.4)
+            cl = int(pw * 1.0); co = int(dx * pw * 0.18)
             ImageDraw.Draw(cast).ellipse(
                 [base_cx - cl // 2 + co, base_y - int(ph * 0.04),
-                 base_cx + cl // 2 + co, base_y + int(ph * 0.13)],
-                fill=int(255 * shadow_opacity * 0.55))
-            cast = cast.filter(ImageFilter.GaussianBlur(max(6, ph * 0.05)))
+                 base_cx + cl // 2 + co, base_y + int(ph * 0.1)],
+                fill=int(255 * shadow_opacity * 0.22))
+            cast = cast.filter(ImageFilter.GaussianBlur(max(10, ph * 0.09)))
             out = Image.composite(dark, out, cast)
             # 第2層 接觸核：緊貼底部的深橢圓（接地主力）
             core = Image.new("L", (cw, ch), 0)

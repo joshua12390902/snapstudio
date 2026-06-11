@@ -148,6 +148,43 @@ def composite_real_face(gen_img: Image.Image, real_rgba: Image.Image) -> Image.I
         return gen_img
 
 
+def compact_reference(real_rgba: Image.Image, margin: float = 1.9) -> Image.Image:
+    """為 AnyDoor 準備「精簡參考圖」：裁到產品主要平面面（錶盤/標籤）+ 邊距。
+
+    為何：AnyDoor 對「主體＋拖尾」形狀（如折疊收納的手錶＝錶頭＋折疊錶帶）會把拖尾
+    的扣環誤生成第二個圓盤＝雙錶（實測過）。裁到緊湊的主面，AnyDoor 才會擺出單一乾淨
+    產品、錶帶由它自然環繞生成；真實細節仍由 composite_real_face 用完整原圖補回。
+    偵測不到主面就退回原圖（不破壞）。沿用 composite 的同一套色彩自適應面偵測，可泛化。"""
+    try:
+        import cv2  # noqa: F401
+        import numpy as np
+        rgba = real_rgba.convert("RGBA")
+        ab = rgba.split()[-1].getbbox()
+        if ab:
+            rgba = rgba.crop(ab)          # 先裁到產品本體，後續偵測/裁切同一座標系
+        arr = np.array(_on_white(rgba))   # _on_white 內部 bbox 已滿版，尺寸與 rgba 一致
+        hue = _dominant_hue(arr)
+        if hue is None:
+            return rgba
+        fr = _face_region(arr, hue)
+        if fr is None:
+            return rgba
+        fill, _cnt = fr
+        ys, xs = np.where(fill > 0)
+        if len(xs) < 50:
+            return rgba
+        cx, cy = (xs.min() + xs.max()) / 2.0, (ys.min() + ys.max()) / 2.0
+        half = max(xs.max() - xs.min(), ys.max() - ys.min()) / 2.0 * margin
+        W, H = rgba.size
+        box = (max(0, int(cx - half)), max(0, int(cy - half)),
+               min(W, int(cx + half)), min(H, int(cy + half)))
+        crop = rgba.crop(box)
+        ab2 = crop.split()[-1].getbbox()  # 收緊到 alpha，去掉裁框內殘留透明邊
+        return crop.crop(ab2) if ab2 else crop
+    except Exception:  # noqa: BLE001
+        return real_rgba.convert("RGBA")
+
+
 def framing_for(card, product_class: str) -> str:
     """取景片語「戴/握在哪」：優先用 VLM 決定的 card.worn_framing（交給 LLM 判斷），
     LLM 沒給時才用一行通用備援。不再硬寫品類對照表。"""
@@ -156,20 +193,42 @@ def framing_for(card, product_class: str) -> str:
         return wf
     if product_class == "handheld":
         return "a hand holding the product naturally"
-    return "a person wearing the product, the body part clearly visible"
+    # wearable 但 VLM 沒給部位：退回「手腕特寫」（最常見穿戴情境），
+    # 絕不可退回「a person」——那會讓 bare_scene_prompt 生出人臉肖像、產品被貼到臉上。
+    return "a person's bare forearm and wrist, the wrist clearly visible in close-up"
+
+
+# 裸場景負面詞：身體部位要「乾淨裸露」給 AnyDoor 擺產品，所以排除任何既有的
+# 穿戴品（手錶/首飾…）與人臉肖像。放 negative_prompt（不會被 CLIP 77-token 截掉），
+# 不塞正面 prompt（實測塞正面會被截斷而失效，場景反而自己長出一支錶）。
+BARE_SCENE_NEGATIVE = ("watch, wristwatch, smartwatch, jewelry, bracelet, bangle, ring, "
+                       "glasses, necklace, face, portrait, headshot, full body, "
+                       "multiple people, crowd, text, logo")
 
 
 def bare_scene_prompt(framing: str, scene_context: str = "", category: str = "") -> str:
     """把 framing（戴/握的取景）轉成「裸身體部位」場景 prompt，供 AnyDoor 當擺放目標。
-    例：'a person's wrist wearing the watch' → 'close-up of a person's wrist, bare skin…'"""
+
+    鐵則：身體部位必須是**畫面主體**；行銷情境（scene_context）只當背景/氛圍，否則
+    text2img 會生出人臉肖像（實測過），AnyDoor 便把產品貼到臉上。身體部位關鍵字擺
+    **最前面**，確保即使 CLIP 77-token 截斷也保得住主體；「不要既有手錶/人臉」等負面
+    交給 BARE_SCENE_NEGATIVE。例：'a person's wrist...' → 乾淨手腕特寫、留白給 AnyDoor。"""
     import re
     bare = re.sub(r"\b(wearing|holding)\b.*", "", framing, flags=re.I).strip().rstrip(", ")
     if not bare:
         bare = "a person's bare forearm and wrist"
-    ctx = f", {scene_context}" if scene_context else ""
-    cat = category or "object"
-    return (f"close-up photo of {bare}, bare skin, plain soft studio background{ctx}, "
-            f"even soft light, photorealistic, high detail, no {cat}, no jewelry, no watch")
+    # 手持類：裸場景若主體是「手」，改成「攤開放鬆、掌心朝上呈現」——避免生出
+    # 「握著空氣」的詭異手勢（實測 controller 兩手空抓很恐怖），讓 AnyDoor 把產品擺在
+    # 攤開的掌上才自然。但穿戴部位（耳/腕/指/頸）優先保留，不可被 hand 規則蓋掉。
+    low = bare.lower()
+    if not any(k in low for k in ("ear", "wrist", "forearm", "finger", "neck", "face", "head")):
+        if "hand" in low or "palm" in low:
+            both = ("two" in low) or ("both" in low) or ("hands" in low)
+            hands = "two open relaxed hands side by side" if both else "an open relaxed hand"
+            bare = f"{hands}, palm facing up, fingers relaxed and open, gently presenting"
+    ctx = f", {scene_context} blurred in the background" if scene_context else ""
+    return (f"close-up photo of {bare}, the body part fills the frame, bare skin, "
+            f"angled toward the camera{ctx}, soft even light, photorealistic, high detail")
 
 
 def _on_white(rgba: Image.Image) -> Image.Image:

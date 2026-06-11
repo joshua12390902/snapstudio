@@ -17,6 +17,7 @@ import io
 import json
 import re
 import subprocess
+import time
 import urllib.request
 from typing import Any, Type, TypeVar
 
@@ -356,10 +357,12 @@ class LLMClient:
             "  - handheld＝拿在手中使用才對（遊戲手把/手機/筆/相機/滑鼠）。\n"
             "  - rigid＝放在檯面展示最對（香水/罐/瓶/皮夾/鞋/盒裝/3C 本體）。\n"
             "  判斷依據是「最自然的使用情境」，不是材質硬度。\n"
-            "★worn_framing：若 wearable/handheld，請你決定「這產品該被戴在哪/怎麼握」的英文"
-            "取景片語，要具體寫出身體部位，例：'a person's wrist wearing the watch, forearm "
-            "visible' / 'two hands holding the game controller while playing' / "
-            "'a hand wearing the ring, fingers visible'；若 rigid 則留空字串。\n" + JSON_RULES
+            "  ★依產品『本質用途』判斷，別被它目前的拍法誤導——手錶就算平放桌上、錶帶"
+            "折疊收納，本質仍是 wearable；別因為『現在放在桌上』就判 rigid。\n"
+            "★worn_framing：只要是 wearable/handheld 就**必填**，不可留空。請決定「這產品該"
+            "戴在哪個身體部位／怎麼握」，務必具體寫出身體部位、且取景是該部位的特寫，例："
+            "'a person's wrist, forearm visible' / 'two hands holding the game controller' / "
+            "'a hand, fingers visible for the ring'；只有 rigid 才留空字串。\n" + JSON_RULES
         )
         messages = [{
             "role": "user",
@@ -417,6 +420,33 @@ class LLMClient:
             '"placement": "ok｜off", "natural": true/false, "issues": ["..."]}\n'
             "size＝產品相對身體部位的比例；placement＝有沒有戴/握在對的位置；"
             "issues＝最該修的問題（繁體中文）。" + JSON_RULES
+        )
+        messages = [{"role": "user", "content": [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": _image_to_data_url(result_image)}}]}]
+        for _ in range(3):
+            try:
+                raw = self._chat_once(self._ollama, config.OLLAMA_VISION_MODEL, messages, 0.3)
+                d = _extract_json(raw)
+                return d if isinstance(d, dict) else None
+            except Exception:
+                continue
+        return None
+
+    def judge_product_shot(self, result_image: Image.Image, product_desc: str) -> dict | None:
+        """VLM 評鎖定模式（剛性商品擺台）成品的 AI 破綻 → 驅動換 seed + 補負面詞重生。
+        回 {needs_fix, flaw_terms(英文負面詞), score, issues}。失敗回 None。"""
+        if not self._ensure_vision():
+            return None
+        prompt = (
+            f"這是一張「{product_desc}」的電商商品攝影成品（產品擺在場景檯面上）。"
+            "請當嚴格修圖總監，檢查常見 AI 破綻：雙重/衝突陰影、產品浮空沒接地、"
+            "產品變形或比例怪、出現重複/第二個產品、明顯接縫或拼貼感、亂碼文字、過曝死白。\n"
+            '只輸出 JSON：{"score": 1-10, "needs_fix": true/false, '
+            '"flaw_terms": "英文負面詞（把發現的瑕疵列成可加進 SDXL negative prompt 的詞，'
+            '如 double shadow, conflicting shadows, floating, deformed bottle）", '
+            '"issues": ["繁體中文具體問題"]}\n'
+            "只有真的有明顯破綻才 needs_fix=true；乾淨就 false、flaw_terms 空字串。" + JSON_RULES
         )
         messages = [{"role": "user", "content": [
             {"type": "text", "text": prompt},
@@ -586,11 +616,14 @@ class LLMClient:
         result = self._structured_call(system, user, ScenePlan, temperature=0.3)
         return result if result is not None else plan
 
-    def release_models(self) -> None:
+    def release_models(self, wait: bool = False, timeout: float = 20.0) -> None:
         """請 Ollama 立即卸載已載入的模型，把 VRAM 讓給 diffusion。
 
         qwen3:14b（約 11GB）若與 SDXL+IC-Light（約 15GB）同駐會爆 24GB，
         pipeline 在 LLM 階段結束後呼叫本方法；失敗不拋例外（無傷大雅）。
+
+        wait=True：輪詢 /api/ps 直到模型真的卸完（或逾時）再返回。供「下一步要吃滿
+        VRAM」的場景用（如 SAM2 去背、載 diffusion），避免 VLM 還沒釋放就 OOM。
         """
         base = config.OLLAMA_BASE_URL.rsplit("/v1", 1)[0]
         try:
@@ -608,3 +641,15 @@ class LLMClient:
                 urllib.request.urlopen(req, timeout=30).read()
             except Exception:
                 pass
+        if not wait:
+            return
+        # 等 Ollama 真的把模型卸出顯卡（/api/ps 清空）再返回
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(f"{base}/api/ps", timeout=5) as resp:
+                    if not json.load(resp).get("models", []):
+                        return
+            except Exception:
+                return
+            time.sleep(0.5)
