@@ -410,6 +410,40 @@ class LLMClient:
                 continue
         return None
 
+    def pick_reference(self, cutouts: list, product_desc: str = "產品") -> int:
+        """多角度去背圖中，讓 VLM 挑「最適合當 AnyDoor 參考」的一張（最正面、產品完整
+        清楚、無折疊收納/遮擋）→ 回索引。單張或 VLM 不可用回 0。選擇題＝VLM 強項，
+        且在 identify 階段（VLM 已載入）呼叫，不額外換模型。"""
+        if not cutouts or len(cutouts) <= 1:
+            return 0
+        if not self._ensure_vision():
+            return 0
+
+        def _white(img):
+            rgba = img.convert("RGBA")
+            bg = Image.new("RGB", rgba.size, (255, 255, 255))
+            bg.paste(rgba, (0, 0), rgba)
+            return bg
+        content = [{"type": "text", "text": (
+            f"以下 {len(cutouts)} 張是同一個「{product_desc}」的不同角度去背照（依序第 1～"
+            f"{len(cutouts)} 張）。我要把這產品自然合成『戴或握在人身上』。請挑**最適合當參考**"
+            "的一張：要正面、產品輪廓完整清楚、沒有折疊收納、沒有被手或其他東西遮住。\n"
+            '只輸出 JSON：{"best": 數字（1 起算）, "why": "簡短原因"}。' + JSON_RULES)}]
+        for c in cutouts:
+            content.append({"type": "image_url",
+                            "image_url": {"url": _image_to_data_url(_white(c))}})
+        messages = [{"role": "user", "content": content}]
+        for _ in range(3):
+            try:
+                d = _extract_json(self._chat_once(
+                    self._ollama, config.OLLAMA_VISION_MODEL, messages, 0.2))
+                if isinstance(d, dict) and "best" in d:
+                    idx = int(d["best"]) - 1
+                    return idx if 0 <= idx < len(cutouts) else 0
+            except Exception:
+                continue
+        return 0
+
     def judge_worn(self, result_image: Image.Image, product_desc: str) -> dict | None:
         """VLM 評穿戴/手持成品：自然度/大小/位置/破綻 → 驅動重跑或收。失敗回 None。"""
         if not self._ensure_vision():

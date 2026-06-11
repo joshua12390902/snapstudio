@@ -263,6 +263,13 @@ class SnapStudio:
             resolved_mode = mode
             if resolved_mode == "reshape" and product_class == "rigid":
                 product_class = "handheld"  # 使用者強制重塑但類別為剛性 → 給手持取景
+        # 重塑模式且有多角度照：趁 VLM 仍載入（identify 階段），讓它挑「最正面、最完整」
+        # 那張當 AnyDoor 參考——折疊角度照會害 AnyDoor 複製/失真，正面照穩很多。
+        ref_view = fg
+        if resolved_mode == "reshape" and len(view_pool) > 1:
+            bi = self.llm.pick_reference(view_pool, card.name_guess or card.category or "產品")
+            ref_view = view_pool[bi]
+            self._notify(progress_cb, f"VLM 選最佳參考角度 #{bi + 1}/{len(view_pool)}", 0.12)
         timings["identify"] = round(time.time() - t0, 2)
 
         self._notify(progress_cb, "場景企劃中", 0.14)
@@ -309,8 +316,8 @@ class SnapStudio:
                 # 2) 卸 RealVisXL 釋 VRAM → AnyDoor subprocess 自動擺放（朝向/光照/環繞）
                 self._reshape.unload(); self._reshape = None
                 # AnyDoor 用「精簡參考」（裁到產品主面，去掉折疊錶帶等拖尾→不再生雙錶）；
-                # 真實細節仍由 composite_real_face 用完整 fg 補回。
-                ref_anydoor = compact_reference(fg)
+                # ref_view＝VLM 從多角度挑的最佳正面照（單張時即主圖）。
+                ref_anydoor = compact_reference(ref_view)
                 # 膚色偵測身體部位定擺放遮罩（實測比 VLM bounding-box grounding 準）
                 masks = [wornplace.body_part_mask(s, product_class) for s in scenes]
                 self._notify(progress_cb, "AnyDoor 自動擺放（朝向/光照/環繞）", 0.62)
@@ -324,32 +331,50 @@ class SnapStudio:
                 for i, p in enumerate(placed):
                     self._notify(progress_cb, f"真實細節合成 {i + 1}/{len(plans)}",
                                  0.68 + 0.20 * i / n)
-                    shots.append(composite_real_face(p, fg) if p is not None else scenes[i])
-                    previews.append(fg)
-                # 4) VLM 裁判（定性=VLM強項）：判定「太大」的，自動以更小遮罩重跑一次
+                    shots.append(composite_real_face(p, ref_view) if p is not None else scenes[i])
+                    previews.append(ref_view)
+                # 4) VLM 裁判（定性=VLM強項）驅動修正，分兩種：
+                #    ・太大 → 同場景、更小遮罩重擺（便宜，只動 AnyDoor）
+                #    ・浮空/位置錯(placement off 或 not natural) → 換 seed 重生場景再擺
+                #      （該場景的手勢沒把部位擺好，縮放治不了，得換一張場景）
                 pdesc = card.name_guess or card.category or "產品"
                 self._notify(progress_cb, "VLM 品質裁判", 0.90)
-                retry = []  # (idx, scene, seed, smaller_mask)
+                shrink, regen = [], []  # shrink:(idx,scene,seed,mask)  regen:(idx,new_seed)
                 for i, p in enumerate(placed):
                     if p is None:
                         continue
                     v = self.llm.judge_worn(shots[i], pdesc)
-                    if v and v.get("size") == "too_big":
-                        retry.append((i, scenes[i], seeds[i],
-                                      wornplace.body_part_mask(scenes[i], product_class, scale=0.34)))
-                if retry:
-                    self.llm.release_models()  # 卸 VLM 再交給 AnyDoor subprocess
-                    self._notify(progress_cb,
-                                 f"VLM 判 {len(retry)} 張過大 → 縮小重跑", 0.94)
+                    if not v:
+                        continue
+                    if v.get("placement") == "off" or v.get("natural") is False:
+                        regen.append((i, self.BASE_SEED + 500 + i))
+                    elif v.get("size") == "too_big":
+                        shrink.append((i, scenes[i], seeds[i], wornplace.body_part_mask(
+                            scenes[i], product_class, scale=0.34)))
+                if shrink or regen:
+                    self.llm.release_models()  # 卸 VLM 釋 VRAM
+                    if regen:  # 重載 RealVisXL 換 seed 重生問題場景，再併入 AnyDoor 批次
+                        self._notify(progress_cb,
+                                     f"VLM 判 {len(regen)} 張擺位不佳 → 換 seed 重生場景", 0.92)
+                        self._ensure_reshape()
+                        for idx, ns in regen:
+                            sp = bare_scene_prompt(framing, plans[idx].scene_prompt, card.category)
+                            ns_scene = self._reshape.generate_scene(
+                                sp, negative_prompt=BARE_SCENE_NEGATIVE, seed=ns)
+                            scenes[idx] = ns_scene
+                            shrink.append((idx, ns_scene, ns, wornplace.body_part_mask(
+                                ns_scene, product_class)))
+                        self._reshape.unload(); self._reshape = None
+                    self._notify(progress_cb, f"AnyDoor 重擺 {len(shrink)} 張", 0.95)
                     try:
                         re_placed = wornplace.place_batch(
-                            ref_anydoor, [r[1] for r in retry], [r[2] for r in retry],
-                            masks=[r[3] for r in retry])
+                            ref_anydoor, [r[1] for r in shrink], [r[2] for r in shrink],
+                            masks=[r[3] for r in shrink])
                     except Exception:  # noqa: BLE001
-                        re_placed = [None] * len(retry)
-                    for (idx, *_), rp in zip(retry, re_placed):
+                        re_placed = [None] * len(shrink)
+                    for (idx, *_), rp in zip(shrink, re_placed):
                         if rp is not None:
-                            shots[idx] = composite_real_face(rp, fg)
+                            shots[idx] = composite_real_face(rp, ref_view)
             else:
                 for i, plan in enumerate(plans):
                     self._notify(progress_cb,
