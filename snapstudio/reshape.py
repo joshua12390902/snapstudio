@@ -54,7 +54,7 @@ def _face_region(rgb, hue: int, tol: int = 20):
         return None
     fill = np.zeros((h, w), np.uint8)
     cv2.fillConvexPoly(fill, cv2.convexHull(c), 255)
-    return fill, cv2.boundingRect(c)
+    return fill, c  # 回傳輪廓供 fitEllipse 求幾何中心（對日期窗/反光等不對稱穩健）
 
 
 def _dominant_hue(rgb):
@@ -86,16 +86,20 @@ def composite_real_face(gen_img: Image.Image, real_rgba: Image.Image) -> Image.I
         g = _face_region(gen_arr, hue)
         if r is None or g is None:
             return gen_img
-        real_fill, _ = r
-        gen_fill, _ = g
+        real_fill, real_cnt = r
+        gen_fill, gen_cnt = g
         Hh, Ww = gen_arr.shape[:2]
 
-        def _centroid_radius(fill):
+        def _center_radius(cnt, fill):
+            # 幾何橢圓中心（對日期窗缺口/反光不對稱穩健），點太少退回質心
+            if len(cnt) >= 5:
+                (cx, cy), (MA, ma), _ = cv2.fitEllipse(cnt)
+                return cx, cy, (MA + ma) / 4.0
             m = cv2.moments(fill, binaryImage=True)
             if m["m00"] < 1:
                 return None
             return (m["m10"] / m["m00"], m["m01"] / m["m00"], (m["m00"] / np.pi) ** 0.5)
-        rc, gc = _centroid_radius(real_fill), _centroid_radius(gen_fill)
+        rc, gc = _center_radius(real_cnt, real_fill), _center_radius(gen_cnt, gen_fill)
         if rc is None or gc is None:
             return gen_img
         rcx, rcy, rrad = rc
