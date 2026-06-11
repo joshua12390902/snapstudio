@@ -1,0 +1,29 @@
+# SnapStudio 依賴（Python 3.10 / CUDA 12.1 上實測之版本）
+#
+# torch 的 +cu121 wheel 不在 PyPI，需走 PyTorch 官方 index：
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.5.1+cu121
+torchvision==0.20.1+cu121
+
+# diffusers 需 0.39.0.dev0（IC-Light 改寫所依賴的新版 API）。PyPI 尚未發佈此版，
+# 釘在實測通過的 commit 從 git 安裝：
+diffusers @ git+https://github.com/huggingface/diffusers.git@9dad53e0362e0e48fc481484e77772d80299b76b
+
+transformers==5.3.0
+huggingface_hub==1.7.2
+accelerate==1.13.0
+safetensors==0.8.0rc0
+peft==0.19.1            # diffusers load_lora_weights（LCM-LoRA 快速檔）必需
+
+# UI 與 LLM 客戶端
+gradio==6.17.3
+openai==2.41.0
+pydantic==2.13.4
+
+# 去背（rembg 走 onnxruntime CPU 推論即可）
+rembg==2.0.69
+onnxruntime==1.23.2
+
+# 影像/數值
+pillow==12.1.1
+numpy==2.2.6

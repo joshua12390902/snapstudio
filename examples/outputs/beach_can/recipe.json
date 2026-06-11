@@ -1,0 +1,21 @@
+{
+ "out_dir": "examples/opt2/beach_can",
+ "jobs": [
+  {
+   "name": "beach_can_golden_sand",
+   "product": "energy_drink",
+   "scale": 0.44, "cx": 0.5, "cy": 0.64,
+   "prompt": "energy drink can on golden beach sand, turquoise sea and soft wave bokeh behind, bright summer sun, water droplets on can, professional product photography, shallow depth of field, vibrant",
+   "negative": "people, person, hands, body, lowres, deformed, floating, second can, duplicate product, clutter, text",
+   "allow_people": false, "harmonize": false, "light_direction": "top", "seed": 77
+  },
+  {
+   "name": "beach_can_wet_pebbles_sunset",
+   "product": "energy_drink",
+   "scale": 0.46, "cx": 0.52, "cy": 0.66,
+   "prompt": "energy drink can on wet sea pebbles at the shoreline, warm sunset glow, ocean horizon bokeh, splashing water, premium product photography, shallow depth of field, cinematic",
+   "negative": "people, person, hands, body, lowres, deformed, floating, second can, duplicate product, clutter, text",
+   "allow_people": false, "harmonize": false, "light_direction": "right", "seed": 21
+  }
+ ]
+}

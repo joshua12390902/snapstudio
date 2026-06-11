@@ -1,0 +1,35 @@
+# 權重與大型產物（用 scripts/download_weights.sh 取得）
+weights/
+
+# 第三方原始碼（TripoSR：另行 clone）
+TripoSR/
+
+# 開發期測試輸出、歸檔、個人原始照
+examples/dev/
+examples/_archive/
+examples/products/raw/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 模型/暫存檔（大）
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.safetensors
+*.bin
+
+# 影片
+*.mkv
+*.mp4
+
+# 環境與日誌
+.env
+*.log
+.gradio/
+.ipynb_checkpoints/
