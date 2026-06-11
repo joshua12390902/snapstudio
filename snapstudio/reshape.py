@@ -86,38 +86,58 @@ def composite_real_face(gen_img: Image.Image, real_rgba: Image.Image) -> Image.I
         g = _face_region(gen_arr, hue)
         if r is None or g is None:
             return gen_img
-        real_fill, (rx, ry, rw, rh) = r
-        gen_fill, (gx, gy, gw, gh) = g
+        real_fill, _ = r
+        gen_fill, _ = g
         Hh, Ww = gen_arr.shape[:2]
-        # 1) 軸對齊初始：真實錶盤裁切→縮到生成錶盤 bbox→放到全圖對應位置
-        crop = real_arr[ry:ry + rh, rx:rx + rw]
-        cropf = real_fill[ry:ry + rh, rx:rx + rw]
-        init = np.zeros_like(gen_arr)
-        init[gy:gy + gh, gx:gx + gw] = cv2.resize(crop, (gw, gh), interpolation=cv2.INTER_AREA)
-        initf = np.zeros((Hh, Ww), np.uint8)
-        initf[gy:gy + gh, gx:gx + gw] = cv2.resize(cropf, (gw, gh), interpolation=cv2.INTER_NEAREST)
-        # 2) ECC 剛性旋轉精修：把真實錶盤對齊「生成錶盤實際朝向」（指針/刻度/日期窗結構），
-        #    只旋轉+平移不變形。cc=相關係數=檢查機制，太低代表對不上→退回軸對齊不硬轉。
-        warp = np.eye(2, 3, dtype=np.float32)
-        cc = -1.0
-        try:
-            tmpl = cv2.GaussianBlur(cv2.cvtColor(gen_arr, cv2.COLOR_RGB2GRAY).astype(np.float32), (5, 5), 0)
-            inp = cv2.GaussianBlur(cv2.cvtColor(init, cv2.COLOR_RGB2GRAY).astype(np.float32), (5, 5), 0)
-            crit = (cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 200, 1e-5)
-            cc, warp = cv2.findTransformECC(tmpl, inp, warp, cv2.MOTION_EUCLIDEAN, crit, initf, 5)
-        except cv2.error:
-            cc = -1.0
-        if cc >= 0.45:
-            aligned = cv2.warpAffine(init, warp, (Ww, Hh), flags=cv2.INTER_LINEAR)
-            af = cv2.warpAffine(initf, warp, (Ww, Hh), flags=cv2.INTER_NEAREST)
-        else:
-            aligned, af = init, initf  # 對不上→不硬轉，維持軸對齊
-        logger.info("composite_real_face ECC cc=%.3f", cc)
-        region = cv2.erode(cv2.bitwise_and(gen_fill, af), np.ones((3, 3), np.uint8))
+
+        def _centroid_radius(fill):
+            m = cv2.moments(fill, binaryImage=True)
+            if m["m00"] < 1:
+                return None
+            return (m["m10"] / m["m00"], m["m01"] / m["m00"], (m["m00"] / np.pi) ** 0.5)
+        rc, gc = _centroid_radius(real_fill), _centroid_radius(gen_fill)
+        if rc is None or gc is None:
+            return gen_img
+        rcx, rcy, rrad = rc
+        gcx, gcy, grad = gc
+        scale = grad / max(rrad, 1.0)
+
+        def _affine(angle_deg):
+            a = np.deg2rad(angle_deg)
+            ca, sa = np.cos(a) * scale, np.sin(a) * scale
+            # 真實點 p → 繞真實質心旋轉縮放 → 平移到生成質心（剛性，圓盤精準對位）
+            return np.array([[ca, -sa, gcx - (ca * rcx - sa * rcy)],
+                             [sa, ca, gcy - (sa * rcx + ca * rcy)]], dtype=np.float32)
+
+        # 邊緣相關旋轉搜尋：對「刻度/指針/錶框」邊緣找最佳角度（不靠亂碼文字）
+        gen_edge = cv2.Canny(cv2.cvtColor(gen_arr, cv2.COLOR_RGB2GRAY), 60, 160).astype(np.float32)
+        gen_edge[gen_fill == 0] = 0
+        real_edge = cv2.Canny(cv2.cvtColor(real_arr, cv2.COLOR_RGB2GRAY), 60, 160).astype(np.float32)
+        best = (-2.0, 0.0, None)
+        for ang in range(-24, 25, 3):
+            M = _affine(ang)
+            we = cv2.warpAffine(real_edge, M, (Ww, Hh))
+            wf = cv2.warpAffine(real_fill, M, (Ww, Hh))
+            sel = (gen_fill > 0) & (wf > 0)
+            if sel.sum() < 200:
+                continue
+            a_, b_ = gen_edge[sel], we[sel]
+            if a_.std() < 1e-3 or b_.std() < 1e-3:
+                continue
+            ncc = float(np.corrcoef(a_, b_)[0, 1])
+            if ncc > best[0]:
+                best = (ncc, float(ang), M)
+        ncc, ang, M = best
+        if M is None or ncc < 0.05:   # 對不上→正立置中（不硬轉）
+            ang, M = 0.0, _affine(0.0)
+        logger.info("composite_real_face angle=%.0f ncc=%.3f", ang, ncc)
+        warped = cv2.warpAffine(real_arr, M, (Ww, Hh), flags=cv2.INTER_LINEAR)
+        wfill = cv2.warpAffine(real_fill, M, (Ww, Hh), flags=cv2.INTER_NEAREST)
+        region = cv2.erode(cv2.bitwise_and(gen_fill, wfill), np.ones((3, 3), np.uint8))
         if region.sum() < 500:
             return gen_img
         alpha = Image.fromarray(region).filter(ImageFilter.GaussianBlur(2.5))
-        return Image.composite(Image.fromarray(aligned), gen_img.convert("RGB"), alpha)
+        return Image.composite(Image.fromarray(warped), gen_img.convert("RGB"), alpha)
     except Exception as exc:  # noqa: BLE001  # 合成失敗絕不可拖垮主流程
         logger.warning("composite_real_face 失敗，用原圖：%s", exc)
         return gen_img
