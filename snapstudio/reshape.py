@@ -104,7 +104,8 @@ def composite_real_face(gen_img: Image.Image, real_rgba: Image.Image) -> Image.I
             return gen_img
         rcx, rcy, rrad = rc
         gcx, gcy, grad = gc
-        scale = grad / max(rrad, 1.0)
+        # 真實錶盤略放大過蓋（1.08），完全蓋住生成錶盤、消除邊緣殘色；由凸包遮罩裁邊不溢出
+        scale = grad / max(rrad, 1.0) * 1.08
 
         def _affine(angle_deg):
             a = np.deg2rad(angle_deg)
@@ -156,6 +157,19 @@ def framing_for(card, product_class: str) -> str:
     if product_class == "handheld":
         return "a hand holding the product naturally"
     return "a person wearing the product, the body part clearly visible"
+
+
+def bare_scene_prompt(framing: str, scene_context: str = "", category: str = "") -> str:
+    """把 framing（戴/握的取景）轉成「裸身體部位」場景 prompt，供 AnyDoor 當擺放目標。
+    例：'a person's wrist wearing the watch' → 'close-up of a person's wrist, bare skin…'"""
+    import re
+    bare = re.sub(r"\b(wearing|holding)\b.*", "", framing, flags=re.I).strip().rstrip(", ")
+    if not bare:
+        bare = "a person's bare forearm and wrist"
+    ctx = f", {scene_context}" if scene_context else ""
+    cat = category or "object"
+    return (f"close-up photo of {bare}, bare skin, plain soft studio background{ctx}, "
+            f"even soft light, photorealistic, high detail, no {cat}, no jewelry, no watch")
 
 
 def _on_white(rgba: Image.Image) -> Image.Image:
@@ -232,6 +246,28 @@ class ReshapeStudio:
             num_inference_steps=steps, guidance_scale=guidance_scale,
             width=width, height=height, generator=gen,
         ).images[0]
+        return img
+
+    @torch.no_grad()
+    def generate_scene(self, prompt: str, *, negative_prompt: str = "",
+                       seed: int | None = None, steps: int = 30,
+                       guidance_scale: float = 6.0, width: int = 1024,
+                       height: int = 768) -> Image.Image:
+        """純 text2img 生成「裸身體部位」場景（供 AnyDoor 當擺放目標）。
+        IP-Adapter 暫設 scale=0 不作用、餵白圖佔位，等同純 text2img。"""
+        if self.pipe is None:
+            self._load()
+        self.pipe.set_ip_adapter_scale(0.0)
+        blank = Image.new("RGB", (224, 224), (255, 255, 255))
+        neg = f"{negative_prompt}, {RESHAPE_NEGATIVE}" if negative_prompt else RESHAPE_NEGATIVE
+        gen = (torch.Generator(self.device).manual_seed(int(seed))
+               if seed is not None else None)
+        img = self.pipe(
+            prompt=prompt, negative_prompt=neg, ip_adapter_image=blank,
+            num_inference_steps=steps, guidance_scale=guidance_scale,
+            width=width, height=height, generator=gen,
+        ).images[0]
+        self.pipe.set_ip_adapter_scale(self.ip_scale)  # 還原
         return img
 
     def unload(self) -> None:

@@ -33,3 +33,11 @@ venv/
 *.log
 .gradio/
 .ipynb_checkpoints/
+
+# 手錶調參迭代產物（開發過程，不入庫）
+examples/outputs/watch_worn/hp_*.png
+examples/outputs/watch_worn/orient_*.png
+examples/outputs/watch_worn/verify_*.png
+examples/outputs/watch_worn/wrist_perp_*.png
+examples/outputs/watch_worn/honest_overlay.png
+examples/outputs/watch_worn/e2e_anydoor.png

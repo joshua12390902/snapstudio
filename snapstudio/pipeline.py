@@ -281,23 +281,54 @@ class SnapStudio:
         n = max(len(plans), 1)
 
         if resolved_mode == "reshape":
-            self._notify(progress_cb, "載入重塑模型（IP-Adapter）", 0.26)
+            from .reshape import framing_for, composite_real_face, bare_scene_prompt
+            from . import wornplace
+            framing = framing_for(card, product_class)  # 取景由 VLM 決定（worn_framing）
+            use_anydoor = wornplace.available()
+            self._notify(progress_cb,
+                         "載入場景模型（AnyDoor 路線）" if use_anydoor
+                         else "載入重塑模型（IP-Adapter）", 0.26)
             t0 = time.time()
             self._ensure_reshape()
             timings["load_models"] = round(time.time() - t0, 2)
-            from .reshape import framing_for, composite_real_face
-            framing = framing_for(card, product_class)  # 取景由 VLM 決定（worn_framing）
-            for i, plan in enumerate(plans):
-                base = 0.30 + 0.68 * i / n
-                self._notify(progress_cb,
-                             f"重塑生成 {i + 1}/{len(plans)}：{plan.plan_name}", base)
-                shot, t = self._render_reshape(fg, plan, framing, self.BASE_SEED + i)
-                # 混合法：把真實平面細節面（錶盤/標籤）合成回去補小細節（最佳努力）
-                shot = composite_real_face(shot, fg)
-                for k, v in t.items():
-                    timings[f"{k}_{i + 1}"] = v
-                shots.append(shot)
-                previews.append(fg)  # 重塑模式無擺位預覽，用去背圖佔位
+
+            if use_anydoor:
+                # 1) text2img 生 N 張「裸身體部位」場景
+                scenes = []
+                seeds = [self.BASE_SEED + i for i in range(len(plans))]
+                for i, plan in enumerate(plans):
+                    self._notify(progress_cb, f"生成裸場景 {i + 1}/{len(plans)}",
+                                 0.30 + 0.30 * i / n)
+                    sp = bare_scene_prompt(framing, plan.scene_prompt, card.category)
+                    scenes.append(self._reshape.generate_scene(sp, seed=seeds[i]))
+                # 2) 卸 RealVisXL 釋 VRAM → AnyDoor subprocess 自動擺放（朝向/光照/環繞）
+                self._reshape.unload(); self._reshape = None
+                self._notify(progress_cb, "AnyDoor 自動擺放（朝向/光照/環繞）", 0.62)
+                # 自動偵測每張場景的身體部位，把擺放遮罩對準它（取代固定中央）
+                masks = [wornplace.body_part_mask(s, product_class) for s in scenes]
+                t0 = time.time()
+                try:
+                    placed = wornplace.place_batch(fg, scenes, seeds, masks=masks)
+                except Exception:  # noqa: BLE001  # AnyDoor 失敗不可崩，退回裸場景
+                    placed = [None] * len(scenes)
+                timings["anydoor"] = round(time.time() - t0, 2)
+                # 3) 把真實平面細節面（錶盤/標籤）合成回去 → 真實 logo
+                for i, p in enumerate(placed):
+                    self._notify(progress_cb, f"真實細節合成 {i + 1}/{len(plans)}",
+                                 0.70 + 0.28 * i / n)
+                    shots.append(composite_real_face(p, fg) if p is not None else scenes[i])
+                    previews.append(fg)
+            else:
+                for i, plan in enumerate(plans):
+                    self._notify(progress_cb,
+                                 f"重塑生成 {i + 1}/{len(plans)}：{plan.plan_name}",
+                                 0.30 + 0.68 * i / n)
+                    shot, t = self._render_reshape(fg, plan, framing, self.BASE_SEED + i)
+                    shot = composite_real_face(shot, fg)  # 真實平面細節合成
+                    for k, v in t.items():
+                        timings[f"{k}_{i + 1}"] = v
+                    shots.append(shot)
+                    previews.append(fg)
         else:
             self._notify(progress_cb, "載入生成模型", 0.26)
             t0 = time.time()
