@@ -31,6 +31,15 @@ class ProductCard(BaseModel):
     # 重塑取景：VLM 決定「這產品怎麼戴/握」的英文片語（rigid 留空），交給 LLM 判斷而非硬寫
     worn_framing: str = Field(
         default="", description="英文，穿戴/手持取景片語，如 a person's wrist wearing the watch")
+    # 最佳呈現：VLM 決定走「乾淨商品擺台(clean)」還是「穿戴/手持(worn)」。穿戴對腳/耳/複雜
+    # 姿態生成不可靠，VLM 應只在穿戴是該品類強烈慣例且身體部位簡單可靠時才選 worn，否則 clean。
+    best_shot: str = Field(
+        default="clean", description="clean 乾淨擺台 / worn 穿戴或手持，VLM 依可靠度與慣例決定")
+
+    @field_validator("best_shot", mode="before")
+    @classmethod
+    def _norm_shot(cls, v: object) -> object:
+        return "worn" if isinstance(v, str) and "worn" in v.strip().lower() else "clean"
 
     @field_validator("product_class", mode="before")
     @classmethod

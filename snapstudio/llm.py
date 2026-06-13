@@ -363,7 +363,8 @@ class LLMClient:
             ' "condition": "新舊狀況（如：二手，狀況良好，輕微使用痕跡）",'
             ' "selling_points": ["3-5 個賣點"], "target_audience": "目標客群",'
             ' "product_class": "rigid｜wearable｜handheld",'
-            ' "worn_framing": "英文取景片語或空字串"}\n'
+            ' "worn_framing": "英文取景片語或空字串",'
+            ' "best_shot": "clean｜worn"}\n'
             "★product_class 是攝影策略關鍵，請依「這產品最自然的展示方式」判斷：\n"
             "  - wearable＝穿戴在身上才對（手錶/戒指/手環/項鍊/耳環/眼鏡/帽）。\n"
             "  - handheld＝拿在手中使用才對（遊戲手把/手機/筆/相機/滑鼠）。\n"
@@ -374,7 +375,11 @@ class LLMClient:
             "★worn_framing：只要是 wearable/handheld 就**必填**，不可留空。請決定「這產品該"
             "戴在哪個身體部位／怎麼握」，務必具體寫出身體部位、且取景是該部位的特寫，例："
             "'a person's wrist, forearm visible' / 'two hands holding the game controller' / "
-            "'a hand, fingers visible for the ring'；只有 rigid 才留空字串。\n" + JSON_RULES
+            "'a hand, fingers visible for the ring'；只有 rigid 才留空字串。\n"
+            "★best_shot：決定這商品上架最該用哪種呈現。**預設 clean**（乾淨商品擺台，最穩、最像"
+            "專業電商大圖）。只有當『穿戴/手持是該品類的強烈慣例、且身體部位簡單可靠（例：手腕"
+            "戴錶、手指戴戒）』才選 worn。鞋子(穿腳上)、入耳耳機(塞耳道)、複雜姿態這類穿戴畫面"
+            "生成不可靠的，一律選 clean。\n" + JSON_RULES
         )
         messages = [{
             "role": "user",

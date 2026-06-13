@@ -274,7 +274,11 @@ class SnapStudio:
         else:
             product_class = fallback_product_class(card)
         if mode == "auto":
-            resolved_mode = "reshape" if product_class in ("wearable", "handheld") else "locked"
+            # auto 路由交給 VLM：穿戴/手持類「且 VLM 判 best_shot=worn(穿戴是可靠慣例)」才走重塑；
+            # 否則一律乾淨 locked 擺台（鞋/耳機等穿戴生成不可靠的，VLM 會判 clean → 走 locked）。
+            want_worn = (product_class in ("wearable", "handheld")
+                         and getattr(card, "best_shot", "clean") == "worn")
+            resolved_mode = "reshape" if want_worn else "locked"
         else:
             resolved_mode = mode
             if resolved_mode == "reshape" and product_class == "rigid":
