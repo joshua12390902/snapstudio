@@ -192,3 +192,18 @@
   (來源圖本身是怪工業盒非正常手把，garbage-in)。
 - **誠實天花板**：100% 每張完美受限於 (a)inpaint 偶發在產品旁長附加物(seed 變異，靠多生挑最佳)、
   (b)極小字 logo 放大檢視的亂碼(來源解析度)、(c)個別來源圖品質(controller)。非單一 bug 可全解。
+
+## 17. 多 agent 全迴圈：找新圖→生成→3視角裁判→修正→再生→再審
+
+- **使用者要的完整機制全部跑通**：(1) 5 個找圖 agent 上網(Unsplash)找乾淨高解析來源(DualShock4/
+  Sony耳機/墨鏡/真皮包/勞力士)，全成功下載+PIL+Read 驗證；(2) serial GPU 生成；(3) 3 視角多裁判
+  (完美主義/務實客戶/破綻獵人)平行審查；(4) 綜合提具體檔案::函式修法；(5) 修 code→重生→再審。
+- **本輪修正**：best_shot 強偏 clean(worn 全品類不可靠)、paste_back 去色邊(MinFilter5+邊緣去飽和)。
+  sunglasses/watch2 改 clean → 產品回來、不再雙錶。
+- **務實客戶標準下**：controller/headphones/watch2 通過(8-9 分)。
+- **誠實天花板(剩餘長尾)**：
+  - sunglasses 細鏡框：去背難精準切細結構→框型變形。
+  - handbag：inpaint 在包體旁「補出」鬼影側袋(extra-parts 延伸，負面詞未完全壓住)。
+  - 彩色邊暈：**次知覺等級**——破綻獵人用像素測色度(背景3.5 vs 接縫17)仍報，但務實/完美視角都判乾淨採用。追到此屬過擬合鑑識 agent，非使用者的電商標準。
+  - 根因多指向 matting.py 對細長/複雜輪廓的覆蓋——屬核心改動、風險高、收益遞減。
+- **可重用工具**：examples/review/{source_finder,review3,gen_sourced}——可隨時再跑更多迴圈。
