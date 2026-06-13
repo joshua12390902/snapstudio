@@ -142,5 +142,21 @@
 - **教訓**：VLM「越大越好」在固定 VRAM 下是假的——**裝不下就 offload，大模型反而慢 10 倍**。
   要嘛挑裝得下的尺寸，要嘛縮 context 讓大模型擠進 GPU。先看 `ollama ps` 的 vram/size 比才知真相。
 
+## 14. 16-agent Workflow 嚴格審查 + 鎖定模式「產品被延伸/外溢」根因
+
+- **做法**：全 8 品生成後，跑 Workflow fan-out 16 個 Claude 視覺 agent(每品「完美主義者+務實
+  電商客戶」雙視角)+1 綜合。結果：5 接受(watch/perfume/energy/lipstick/controller)、3 拒
+  (sneaker/wallet/earbuds)、整理出 6 大系統性瑕疵。
+- **最反直覺的指控**：reviewer 說「鎖定模式產品本體被重畫」——錶變 TV 方盒、香水長蠟燭、
+  皮夾蛇皮淹滿整個廚房中島。**我親自開圖驗證→屬實，reviewer 沒誇大。**
+- **dump 中間圖找機制**：dump cutout/mask/product/inpaint原始/paste_back後。發現：
+  **paste_back 沒失敗**，產品本體有貼回；是 **inpaint 在「產品緊鄰的場景區(白遮罩)」自動
+  延伸/補全產品**——錶旁邊長出錶冠球、香水瓶口長蠟燭、皮夾把蛇皮紋外溢鋪滿場景。遮罩鎖住
+  產品「像素」，但管不住 inpaint 在旁邊「接著畫」。
+- **解(已實測)**：加 `LOCKED_NEGATIVE` 通用負面詞(extra parts/crown/candle/repeated texture/
+  product texture on walls…)。手錶實測 2 seed→錶冠球消失、乾淨完整。
+- **教訓**：「鎖定/凍結」只保證被遮罩的像素不變，**不保證旁邊不會生成與產品相關的東西**；
+  延伸/外溢要靠負面詞與場景約束擋。驗 reviewer 指控一定要自己開圖——但這次它對了。
+
 ---
 （持續更新）

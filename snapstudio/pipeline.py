@@ -34,6 +34,19 @@ ProgressCB = Optional[Callable[[str, float], None]]
 _QUALITY = {"fine": (32, 7.5), "fast": (14, 7.5)}
 CANVAS = (1024, 1024)
 
+# 鎖定模式「通用物理」負面詞——只擋普世失效模式(產品被延伸/複製/變形、材質外溢到背景、
+# 產品過大佔滿)，不列 crown/candle 這類產品專屬詞(那交給 VLM 裁判看圖自己抓→回傳 flaw_terms
+# →重生)。實測這組通用詞已能壓掉錶冠延伸與皮夾蛇皮外溢。少硬規則、產品專屬靠 VLM。
+LOCKED_NEGATIVE = (
+    "extra object growing from or fused with the product, "
+    "knob crown dome antenna handle or finial added on top of the product, "
+    "candle or flame on the product, product turned into a different object, "
+    "duplicate product, second product, deformed product, "
+    "product material or pattern spreading onto background walls floor or furniture, "
+    "irrelevant prop touching or competing with the product, "
+    "oversized product filling the whole frame"
+)
+
 
 @dataclass
 class StudioResult:
@@ -158,8 +171,8 @@ class SnapStudio:
         t0 = time.time()
         gen = self._inpaint.generate(
             parts["init"], parts["mask"], plan.scene_prompt,
-            negative_prompt=plan.negative_prompt, steps=steps,
-            guidance_scale=guidance, seed=seed, allow_people=allow_people,
+            negative_prompt=(plan.negative_prompt + ", " + LOCKED_NEGATIVE).strip(", "),
+            steps=steps, guidance_scale=guidance, seed=seed, allow_people=allow_people,
         )
         shot = paste_back(gen, parts["product"], light_direction=plan.light_direction)
         t["inpaint"] = round(time.time() - t0, 2)
@@ -423,13 +436,17 @@ class SnapStudio:
                 fixes = []
                 for i in range(len(plans)):
                     v = self.llm.judge_product_shot(shots[i], pdesc)
-                    # 保守門檻：鎖定品本來就乾淨；只在「明顯破綻」(needs_fix 且分數≤5)才換 seed
-                    # 重生——重生＝再一輪 diffusion(最貴)，harsh VLM 易把乾淨圖也判 fix。
-                    if v and v.get("needs_fix") and (v.get("score") or 10) <= 5:
+                    # 信 VLM 看圖判斷(VLM-driven)：只要它判 needs_fix(明顯上架硬傷)就重生。
+                    if v and v.get("needs_fix"):
                         p2 = plans[i].model_copy()
                         flaw = (v.get("flaw_terms") or "").strip()
                         if flaw:
                             p2.negative_prompt = (plans[i].negative_prompt + ", " + flaw).strip(", ")
+                        # 原場景已被判有破綻(常是道具/風格誘發產品morph)→重生改用乾淨棚景，
+                        # 不再 roll 同一個會誘發 morph 的花場景。
+                        p2.scene_prompt = ("professional product photography, the product on a "
+                                           "clean smooth surface, simple uncluttered softly-lit "
+                                           "studio background, subtle soft contact shadow at the base")
                         fixes.append((i, p2))
                 timings["vlm_qc"] = round(time.time() - tqc, 2)
                 if fixes:

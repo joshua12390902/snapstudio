@@ -488,7 +488,11 @@ class LLMClient:
         prompt = (
             f"這是一張「{product_desc}」的電商商品攝影成品（產品擺在場景檯面上）。"
             "請當嚴格修圖總監，檢查常見 AI 破綻：雙重/衝突陰影、產品浮空沒接地、"
-            "產品變形或比例怪、出現重複/第二個產品、明顯接縫或拼貼感、亂碼文字、過曝死白。\n"
+            "產品變形或比例怪、**產品被改造成別的物件**(例如手錶變成時鐘/收音機/老機箱)、"
+            "**產品上長出多餘部件**(錶冠/把手/突起/天線)、出現重複/第二個產品、"
+            "**出現與商品無關的道具**(食物/堅果/水果/蠟燭等搶鏡或貼著產品的東西)、"
+            "材質紋路外溢到背景牆面/檯面、明顯接縫或拼貼感、亂碼文字、過曝死白。\n"
+            "以上任何一項只要明顯出現，就是 needs_fix=true（這些是上架硬傷）。\n"
             '只輸出 JSON：{"score": 1-10, "needs_fix": true/false, '
             '"flaw_terms": "英文負面詞（把發現的瑕疵列成可加進 SDXL negative prompt 的詞，'
             '如 double shadow, conflicting shadows, floating, deformed bottle）", '
@@ -584,13 +588,16 @@ class LLMClient:
                 "sea and palm bokeh / cozy cafe interior），避免死板純色或一片空沙；"
                 "結尾加 professional product photography, soft shadows, shallow depth "
                 "of field, vibrant。\n"
-                "  ★ 嚴禁：人物、其他同類商品、街景車輛、搶鏡主體。背景要美但不雜亂。\n"
-                "  ★ 不要描述商品本身（已鎖定）。\n"
+                "  ★ 嚴禁：人物、其他同類商品、**無關道具（食物/水果/蠟燭/堅果等）**、街景車輛、"
+                "搶鏡主體；若要放道具必須與商品相關、置於旁側、不可碰到或擋住商品。背景要美但"
+                "不雜亂，且**不可用會改造商品外型的強烈風格**（例：復古電視/收音機/老式機箱質感，"
+                "會把商品輪廓帶歪）。\n"
+                "  ★ 不要描述商品本身（已鎖定），更不要把商品說成別的物件。\n"
                 "- negative_prompt：英文（cluttered, busy, extra objects, people, "
                 "multiple products, duplicate cans, flat plain background, dull）\n"
                 "- ★【角度多樣】product_view 三選一（front／three_quarter／top）。"
                 "N 組**不要都 front**：至少 1 組 three_quarter（3/4 側角，最有立體質感）、"
-                "可安排 1 組 top（俯視平拍 flat-lay，配桌面散落小道具）。讓主角角度有變化。\n"
+                "可安排 1 組 top（俯視平拍 flat-lay，桌面乾淨留白、不要散落道具）。讓主角角度有變化。\n"
                 "- ★【背景多樣】N 組的環境類型要**明顯不同**，禁止都同一種檯面＋灰漸層："
                 "例如咖啡廳木桌／工業風水泥／大理石浴室檯／木質書桌暖光／戶外石階草地／"
                 "霓虹夜店等各挑不同的，色調與光氛也要區隔。\n"
