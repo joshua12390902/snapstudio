@@ -174,10 +174,19 @@ def paste_back(generated: Image.Image, product: Image.Image,
     light_direction：光源方向，投影往反方向延伸（left→影子偏右，依此類推）。
     """
     out = generated.convert("RGB").copy()
-    # 抗白暈：把 alpha 邊緣內縮 1px，去掉 rembg 殘留的半透明亮邊
+    # 去色邊 + 抗暈：去背 alpha 邊緣常殘留「半透明且帶原圖背景色」的像素，貼回後沿產品輪廓
+    # 形成彩色點狀邊暈(rainbow confetti seam，破綻獵人在每個產品都抓到)。先把 alpha 內縮 ~2px
+    # 切掉最髒的過渡帶，再把剩餘半透明邊緣帶去飽和(往灰中和)，消除彩邊。
     product = product.convert("RGBA")
     r, g, b, a = product.split()
-    a = a.filter(ImageFilter.MinFilter(3))
+    a = a.filter(ImageFilter.MinFilter(5))  # 內縮 ~2px，切掉去背污染邊
+    arr = np.array(Image.merge("RGB", (r, g, b))).astype(np.float32)
+    am = np.asarray(a, dtype=np.float32) / 255.0
+    edge = (am > 0.04) & (am < 0.96)  # 半透明過渡帶
+    if edge.any():
+        grayv = arr.mean(axis=2, keepdims=True)
+        arr[edge] = arr[edge] * 0.35 + grayv[edge] * 0.65  # 邊緣去飽和→中和彩邊
+        r, g, b = (Image.fromarray(arr[..., i].astype("uint8")) for i in range(3))
     product = Image.merge("RGBA", (r, g, b, a))
     if shadow:
         alpha = a

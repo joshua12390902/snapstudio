@@ -376,10 +376,10 @@ class LLMClient:
             "戴在哪個身體部位／怎麼握」，務必具體寫出身體部位、且取景是該部位的特寫，例："
             "'a person's wrist, forearm visible' / 'two hands holding the game controller' / "
             "'a hand, fingers visible for the ring'；只有 rigid 才留空字串。\n"
-            "★best_shot：決定這商品上架最該用哪種呈現。**預設 clean**（乾淨商品擺台，最穩、最像"
-            "專業電商大圖）。只有當『穿戴/手持是該品類的強烈慣例、且身體部位簡單可靠（例：手腕"
-            "戴錶、手指戴戒）』才選 worn。鞋子(穿腳上)、入耳耳機(塞耳道)、複雜姿態這類穿戴畫面"
-            "生成不可靠的，一律選 clean。\n" + JSON_RULES
+            "★best_shot：**幾乎一律選 clean**（乾淨商品擺台，最穩、最像專業電商大圖）。實測目前的"
+            "穿戴/手持生成引擎**對所有品類都不可靠**——手錶會雙錶、眼鏡會消失或鼻樑熔化、鞋會浮空、"
+            "耳機貼臉頰、手把懸空。故 best_shot 預設且強烈建議 **clean**；除非使用者**明確要求**戴/握"
+            "在身上的情境圖，否則不要選 worn（要穿戴情境請走手動重塑模式）。\n" + JSON_RULES
         )
         messages = [{
             "role": "user",
