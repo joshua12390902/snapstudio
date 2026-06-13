@@ -261,12 +261,24 @@ class LLMClient:
             return False
         if model not in tags and model.split(":")[0] not in tags:
             try:
-                proc = subprocess.Popen(
-                    ["ollama", "pull", model],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                proc.wait(timeout=300)
+                if "-ctx" in model:
+                    # 本地 num_ctx 變體(如 qwen2.5vl:32b-ctx8k)：registry 沒有，要用 ollama create
+                    # 從 base 建。-ctx8k→num_ctx 8192，讓 32b 縮 context 後能(大致)進 GPU。
+                    base = model.split("-ctx")[0]
+                    suffix = model.split("-ctx")[1]
+                    nctx = int(suffix.rstrip("k")) * 1024 if suffix.endswith("k") else int(suffix)
+                    mf = f"/tmp/Modelfile_{model.replace(':', '_').replace('-', '_')}"
+                    with open(mf, "w") as f:
+                        f.write(f"FROM {base}\nPARAMETER num_ctx {nctx}\n")
+                    subprocess.run(["ollama", "create", model, "-f", mf], timeout=300,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                else:
+                    proc = subprocess.Popen(
+                        ["ollama", "pull", model],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    proc.wait(timeout=300)
             except subprocess.TimeoutExpired:
                 # 不殺 pull（可續傳），本次先放棄走手動輸入
                 self._vision_ready = False

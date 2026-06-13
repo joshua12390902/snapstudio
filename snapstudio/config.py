@@ -33,7 +33,10 @@ LLM_MODEL = os.getenv("SNAPSTUDIO_LLM_MODEL", "opencode/big-pickle")
 LLM_API_KEY = os.getenv("SNAPSTUDIO_LLM_API_KEY", os.getenv("OPENCODE_API_KEY", ""))
 OLLAMA_BASE_URL = os.getenv("SNAPSTUDIO_OLLAMA_BASE_URL", "http://localhost:11434/v1")
 OLLAMA_TEXT_MODEL = os.getenv("SNAPSTUDIO_OLLAMA_TEXT_MODEL", "qwen3:14b")
-OLLAMA_VISION_MODEL = os.getenv("SNAPSTUDIO_OLLAMA_VISION_MODEL", "qwen2.5vl:32b")
-# 品質裁判用較小的 VLM：32b 對大圖單次推論要 ~5 分鐘(實測)，太慢；裁判只需抓「明顯破綻」，
-# 7b 足夠且快 3-5 倍，又只佔 6GB(可與 inpaint 共駐)。識別/挑參考仍用 32b 求準。
-OLLAMA_JUDGE_MODEL = os.getenv("SNAPSTUDIO_OLLAMA_JUDGE_MODEL", "qwen2.5vl:7b")
+# 用「限制 context 的 32b」兼顧強度與速度：原生 32b 預設 context 太大(模型+ctx≈51GB)→只 24GB
+# 進 GPU、其餘 CPU offload→單次 263s 不能用。實測縮 num_ctx 後 32b 大致進 GPU：8192→29s、
+# 4096→9s，且輸出比 7b 強(會填對 worn_framing)。用 8192 平衡(可吃 1024 圖、輸出完整)。
+#   建模型：ollama create qwen2.5vl:32b-ctx8k -f Modelfile（內容 FROM qwen2.5vl:32b / PARAMETER
+#   num_ctx 8192）。若該卡更小或要更快，可改 SNAPSTUDIO_OLLAMA_VISION_MODEL=qwen2.5vl:7b。
+OLLAMA_VISION_MODEL = os.getenv("SNAPSTUDIO_OLLAMA_VISION_MODEL", "qwen2.5vl:32b-ctx8k")
+OLLAMA_JUDGE_MODEL = os.getenv("SNAPSTUDIO_OLLAMA_JUDGE_MODEL", "qwen2.5vl:32b-ctx8k")

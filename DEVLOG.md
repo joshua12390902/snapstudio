@@ -127,5 +127,20 @@
   (2) 環境的 shell 行為(noclobber)會靜默吃掉你的指令；(3) 看到無法解釋的「完全相同」就去質疑
   測試管線本身，而不是反覆改被測程式。
 
+## 13. identify 也要 900s？→ 32b CPU offload 的決定性證據與解法
+
+- **現象**：批次裡 `identify` 計時 **900s**(≈3×300s client timeout)，watch/perfume 都一樣。
+- **量測**：寫診斷腳本同時測 32b vs 7b 並印 `ollama ps` 的 vram/size：
+  - 32b：identify **263s**，`size=51.1G vram=24.4G` → **CPU offload**(只 24GB 進卡，其餘 CPU)。
+  - 7b：identify **7s**，`size=22.8G vram=22.8G` → **全進 GPU**，且分類同樣正確(wearable/PRX)。
+- **關鍵領悟**：32b 慢不是模型「重」，是**裝不下被迫 offload**。51GB 大半是 context KV cache。
+  測縮 `num_ctx`：4096→9s、8192→23s（offload 大幅縮小）。
+- **解（兼顧使用者要的「強 VLM」）**：建 `qwen2.5vl:32b-ctx8k`(num_ctx 8192)。實測 identify 29s、
+  輸出比 7b 強(會填對 worn_framing)。`_ensure_vision` 偵測 `-ctx` 變體會自動 `ollama create`。
+  要更快可改 7b。
+- **連帶**：把單品總時間從 581~1391s 砍到 ~206s(7b)/~330s(32b-ctx8k)；identify 263→29s 是主刀。
+- **教訓**：VLM「越大越好」在固定 VRAM 下是假的——**裝不下就 offload，大模型反而慢 10 倍**。
+  要嘛挑裝得下的尺寸，要嘛縮 context 讓大模型擠進 GPU。先看 `ollama ps` 的 vram/size 比才知真相。
+
 ---
 （持續更新）
