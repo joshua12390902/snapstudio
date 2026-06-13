@@ -176,3 +176,19 @@
 - **方法論收穫**：多 agent 雙視角審查(務實客戶當及格線+完美主義者抓破綻)能穩定指出系統性瑕疵；
   每輪「審查→改 code→重生→再審」確實收斂。VLM 驅動(judge 抓破綻→重生)+ 最小通用負面詞，比硬列
   產品專屬規則更符合需求且有效。
+
+## 16. Round 4-5：IC-Light off 保 logo + 修自引入的彩色邊暈
+
+- **亂碼字根因(dump 證實)**：energy_drink 去背圖 logo 清晰可讀，但成品變 MONƎTER——**不是來源糊，
+  是 pipeline 弄壞**。隔離測試：harmonize=False(關 IC-Light)→logo 恢復可讀。**IC-Light 光線融合
+  會洗糊/扭曲產品正面文字**。→ 鎖定模式預設關 IC-Light(接地靠程式陰影、不靠它)。
+- **VLM best_shot 路由**：加 ProductCard.best_shot，VLM 自判 clean/worn(穿戴不可靠的鞋/耳機→clean)，
+  sneaker/earbuds/controller 全自動走乾淨 locked → 不再浮空/貼臉。少硬規則、交給 VLM。
+- **自引入回歸**：§15 的遮罩 dilate(MaxFilter)雖修了邊緣染色，卻讓「擴張鎖定環」殘留高頻雜訊→
+  成品產品輪廓一圈彩色 confetti(IC-Light 開時被糊掉、關後曝露)。**修：擴張環在 init 先鋪 127 灰**，
+  產品蓋回後只剩中性灰環被鎖、羽化後柔順銜接→彩邊消失。
+- **5 輪迭代收斂**：1→5 輪「生成→16-agent 雙視角審查→改 code→重生」，務實客戶可用度從 5/8 到
+  穩定 6/8(watch/perfume/energy/sneaker/wallet/earbuds)。剩 lipstick(透明殼歧義)、controller
+  (來源圖本身是怪工業盒非正常手把，garbage-in)。
+- **誠實天花板**：100% 每張完美受限於 (a)inpaint 偶發在產品旁長附加物(seed 變異，靠多生挑最佳)、
+  (b)極小字 logo 放大檢視的亂碼(來源解析度)、(c)個別來源圖品質(controller)。非單一 bug 可全解。

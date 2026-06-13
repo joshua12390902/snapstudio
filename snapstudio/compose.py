@@ -131,10 +131,17 @@ def build_scene_inputs(
     prod_layer.paste(fg, (px, py), fg)
     prod_alpha = prod_layer.split()[-1]
 
-    # init：種子化高頻雜訊底 → 貼上產品（產品區之後被 mask 保護不變）
+    # 擴張鎖定遮罩（先 dilate 補償羽化往內吃 + 去背對細長結構的不精準，確保產品邊緣全鎖）
+    keep = prod_alpha.filter(ImageFilter.MaxFilter(9))  # ~4px 擴張
+
+    # init：種子化高頻雜訊底 → 在「擴張鎖定環」鋪中性灰 → 貼上產品。
+    # 灰環關鍵：擴張鎖定區會被原樣保留，若該處是高頻雜訊，成品產品輪廓外會殘留一圈彩色雜訊暈
+    # (chromatic edge fringe，實測 perfume/罐邊一圈五彩 confetti)。先在擴張環鋪 127 灰，產品蓋回後
+    # 只剩產品外一圈中性灰被鎖住，羽化後與生成場景柔和銜接，不再有彩邊。
     rng = np.random.RandomState(seed)
     noise = (rng.rand(ch, cw, 3) * 255).astype(np.uint8)
     init = Image.fromarray(noise, "RGB")
+    init.paste((127, 127, 127), (0, 0), keep)
     init.paste(fg, (px, py), fg)
 
     # 產品依相同擺放貼到 127 灰底（IC-Light 前景格式，位置與場景一致）
@@ -145,11 +152,8 @@ def build_scene_inputs(
     preview = Image.new("RGB", canvas, (200, 200, 200))
     preview.paste(fg, (px, py), fg)
 
-    # mask：白底（全要生成）→ 把產品塗黑（保留），再羽化邊界。
-    # 先 dilate（MaxFilter）再羽化：羽化(GaussianBlur)會把鎖定邊界往產品內側吃，加上去背在
-    # 細長/鏤空結構(錶帶鍊節)易漏，導致 inpaint 碰到產品邊緣重繪→染場景色(實測 watch 錶帶橘藍
-    # 色塊、wallet 鏽邊、lipstick 接縫)。先擴張遮罩補償，確保整片產品邊緣都被硬鎖。
-    keep = prod_alpha.filter(ImageFilter.MaxFilter(9))  # ~4px 擴張，補償羽化寬度
+    # mask：白底（全要生成）→ 擴張鎖定環塗黑（保留，含產品＋灰環，邊緣全鎖不被 inpaint 染色）→
+    # 羽化。keep 已於上方算好（與 init 灰環同一個，確保鎖定區＝灰環，不殘留彩色雜訊）。
     mask = Image.new("L", canvas, 255)
     mask.paste(Image.new("L", canvas, 0), (0, 0), keep)
     if feather > 0:
