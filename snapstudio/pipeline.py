@@ -13,11 +13,14 @@ v2 重設計（解決舊版「貼紙感」）：
 """
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 from . import config  # noqa: F401  # 匯入即設定 HF_HUB_OFFLINE 等環境變數
 from .compose import Placement, build_scene_inputs, paste_back
@@ -285,7 +288,7 @@ class SnapStudio:
         t0 = time.time()
         copy_pack = self.llm.write_copy(card, plans[0]) if plans else None
         timings["copy"] = round(time.time() - t0, 2)
-        self.llm.release_models()  # 讓出 Ollama 佔的 VRAM 再載 diffusion
+        self.llm.release_models(wait=True)  # 等 Ollama 真的卸完再載 diffusion（否則 race→OOM）
 
         shots, previews = [], []
         n = max(len(plans), 1)
@@ -352,7 +355,7 @@ class SnapStudio:
                         shrink.append((i, scenes[i], seeds[i], wornplace.body_part_mask(
                             scenes[i], product_class, scale=0.34)))
                 if shrink or regen:
-                    self.llm.release_models()  # 卸 VLM 釋 VRAM
+                    self.llm.release_models(wait=True)  # 等卸完再交給 AnyDoor/RealVisXL（避免 OOM）
                     if regen:  # 重載 RealVisXL 換 seed 重生問題場景，再併入 AnyDoor 批次
                         self._notify(progress_cb,
                                      f"VLM 判 {len(regen)} 張擺位不佳 → 換 seed 重生場景", 0.92)
@@ -406,29 +409,44 @@ class SnapStudio:
                 previews.append(preview)
             # VLM 品質把關（生圖也跟 VLM 溝通修正）：卸 inpaint→逐張判 AI 破綻→
             # 有瑕疵就「換 seed＋把瑕疵加進負面詞」重生（自動化人工目視）
+            # 全程 best-effort：QC 不可拖垮主流程。任何失敗(含 OOM)就保留乾淨原圖
+            #（鎖定品像素鎖死、原圖本來就乾淨），絕不讓品質把關把整個產品搞掛。
             pdesc = card.name_guess or card.category or "產品"
             self._notify(progress_cb, "VLM 品質把關", 0.86)
-            self._inpaint.unload(); self._inpaint = None
-            fixes = []
-            for i in range(len(plans)):
-                v = self.llm.judge_product_shot(shots[i], pdesc)
-                if v and v.get("needs_fix"):
-                    p2 = plans[i].model_copy()
-                    flaw = (v.get("flaw_terms") or "").strip()
-                    if flaw:
-                        p2.negative_prompt = (plans[i].negative_prompt + ", " + flaw).strip(", ")
-                    fixes.append((i, p2))
-            if fixes:
-                self.llm.release_models()  # 卸 VLM 再重載 inpaint
-                self._ensure_inpaint()
-                self._notify(progress_cb,
-                             f"VLM 判 {len(fixes)} 張有瑕疵 → 換 seed＋補負面詞重生", 0.94)
-                for i, p2 in fixes:
-                    fg_view = view_pool[i % len(view_pool)]
-                    s2, _, _ = self._render_plan(fg_view, p2, place_override,
-                                                 self.BASE_SEED + 1000 + i, harmonize,
-                                                 allow_people=lifestyle)
-                    shots[i] = s2
+            tqc = time.time()
+            try:
+                # 卸掉 inpaint 與 relight，把整張 24GB 讓給 VLM
+                if self._inpaint is not None:
+                    self._inpaint.unload(); self._inpaint = None
+                if self._relight is not None:
+                    self._relight.unload(); self._relight = None
+                fixes = []
+                for i in range(len(plans)):
+                    v = self.llm.judge_product_shot(shots[i], pdesc)
+                    # 保守門檻：鎖定品本來就乾淨；只在「明顯破綻」(needs_fix 且分數≤5)才換 seed
+                    # 重生——重生＝再一輪 diffusion(最貴)，harsh VLM 易把乾淨圖也判 fix。
+                    if v and v.get("needs_fix") and (v.get("score") or 10) <= 5:
+                        p2 = plans[i].model_copy()
+                        flaw = (v.get("flaw_terms") or "").strip()
+                        if flaw:
+                            p2.negative_prompt = (plans[i].negative_prompt + ", " + flaw).strip(", ")
+                        fixes.append((i, p2))
+                timings["vlm_qc"] = round(time.time() - tqc, 2)
+                if fixes:
+                    tre = time.time()
+                    self.llm.release_models(wait=True)  # 等 VLM 全卸再重載 inpaint（避免 OOM）
+                    self._ensure_inpaint()
+                    self._notify(progress_cb,
+                                 f"VLM 判 {len(fixes)} 張明顯破綻 → 換 seed＋補負面詞重生", 0.94)
+                    for i, p2 in fixes:
+                        fg_view = view_pool[i % len(view_pool)]
+                        s2, _, _ = self._render_plan(fg_view, p2, place_override,
+                                                     self.BASE_SEED + 1000 + i, harmonize,
+                                                     allow_people=lifestyle)
+                        shots[i] = s2
+                    timings["regen"] = round(time.time() - tre, 2)
+            except Exception as exc:  # noqa: BLE001  # QC 失敗(含 OOM)→保留原圖，不崩
+                logger.warning("鎖定 VLM 品質把關失敗，保留原圖：%s", exc)
 
         # 收尾：卸掉裁判階段載入的 Ollama VLM，讓顯卡乾淨交還（下一輪不必再清）。
         self.llm.release_models()

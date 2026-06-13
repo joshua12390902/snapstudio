@@ -34,3 +34,6 @@ LLM_API_KEY = os.getenv("SNAPSTUDIO_LLM_API_KEY", os.getenv("OPENCODE_API_KEY", 
 OLLAMA_BASE_URL = os.getenv("SNAPSTUDIO_OLLAMA_BASE_URL", "http://localhost:11434/v1")
 OLLAMA_TEXT_MODEL = os.getenv("SNAPSTUDIO_OLLAMA_TEXT_MODEL", "qwen3:14b")
 OLLAMA_VISION_MODEL = os.getenv("SNAPSTUDIO_OLLAMA_VISION_MODEL", "qwen2.5vl:32b")
+# 品質裁判用較小的 VLM：32b 對大圖單次推論要 ~5 分鐘(實測)，太慢；裁判只需抓「明顯破綻」，
+# 7b 足夠且快 3-5 倍，又只佔 6GB(可與 inpaint 共駐)。識別/挑參考仍用 32b 求準。
+OLLAMA_JUDGE_MODEL = os.getenv("SNAPSTUDIO_OLLAMA_JUDGE_MODEL", "qwen2.5vl:7b")

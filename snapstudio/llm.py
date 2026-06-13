@@ -457,10 +457,11 @@ class LLMClient:
         )
         messages = [{"role": "user", "content": [
             {"type": "text", "text": prompt},
-            {"type": "image_url", "image_url": {"url": _image_to_data_url(result_image)}}]}]
+            {"type": "image_url",
+             "image_url": {"url": _image_to_data_url(result_image, max_side=672)}}]}]
         for _ in range(3):
             try:
-                raw = self._chat_once(self._ollama, config.OLLAMA_VISION_MODEL, messages, 0.3)
+                raw = self._chat_once(self._ollama, config.OLLAMA_JUDGE_MODEL, messages, 0.3)
                 d = _extract_json(raw)
                 return d if isinstance(d, dict) else None
             except Exception:
@@ -484,10 +485,11 @@ class LLMClient:
         )
         messages = [{"role": "user", "content": [
             {"type": "text", "text": prompt},
-            {"type": "image_url", "image_url": {"url": _image_to_data_url(result_image)}}]}]
+            {"type": "image_url",
+             "image_url": {"url": _image_to_data_url(result_image, max_side=672)}}]}]
         for _ in range(3):
             try:
-                raw = self._chat_once(self._ollama, config.OLLAMA_VISION_MODEL, messages, 0.3)
+                raw = self._chat_once(self._ollama, config.OLLAMA_JUDGE_MODEL, messages, 0.3)
                 d = _extract_json(raw)
                 return d if isinstance(d, dict) else None
             except Exception:
@@ -650,7 +652,7 @@ class LLMClient:
         result = self._structured_call(system, user, ScenePlan, temperature=0.3)
         return result if result is not None else plan
 
-    def release_models(self, wait: bool = False, timeout: float = 20.0) -> None:
+    def release_models(self, wait: bool = False, timeout: float = 60.0) -> None:
         """請 Ollama 立即卸載已載入的模型，把 VRAM 讓給 diffusion。
 
         qwen3:14b（約 11GB）若與 SDXL+IC-Light（約 15GB）同駐會爆 24GB，
@@ -677,13 +679,27 @@ class LLMClient:
                 pass
         if not wait:
             return
-        # 等 Ollama 真的把模型卸出顯卡（/api/ps 清空）再返回
+        # 等顯卡記憶體「實際」釋放再返回。不信 /api/ps（Ollama 回報清空 ≠ VRAM 已吐出，
+        # 實測 keep_alive=0 後 VLM 仍佔 22GB→載 diffusion OOM）；直接輪詢 nvidia-smi 的
+        # 真實剩餘記憶體，夠載 inpaint(~9GB)+headroom 才返回。
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             try:
-                with urllib.request.urlopen(f"{base}/api/ps", timeout=5) as resp:
-                    if not json.load(resp).get("models", []):
-                        return
+                out = subprocess.run(
+                    ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+                    capture_output=True, text=True, timeout=5).stdout
+                free_mib = int(out.strip().split("\n")[0])
+                # 門檻要高到「確定 VLM 全卸」：7b(~8GB) 沒卸時 free≈16GB，若門檻只 16000 會
+                # 誤放行→7b 與 inpaint(~14GB) 共駐 OOM。設 20000 確保任何 VLM 都已吐乾淨。
+                if free_mib > 20000:
+                    return
             except Exception:
-                return
-            time.sleep(0.5)
+                # nvidia-smi 不可用 → 退回 /api/ps 輪詢
+                try:
+                    with urllib.request.urlopen(f"{base}/api/ps", timeout=5) as resp:
+                        if not json.load(resp).get("models", []):
+                            time.sleep(1.5)
+                            return
+                except Exception:
+                    return
+            time.sleep(0.8)
