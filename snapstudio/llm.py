@@ -571,8 +571,9 @@ class LLMClient:
             )
             scene_rule = (
                 "- 你是商品攝影美術指導，**自己決定構圖**：產品當醒目英雄、置中偏下"
-                "（product_x 約 0.5、product_y 0.66~0.72、product_scale 0.50~0.60，"
-                "主體要大不要小），讓上方有背景、下方有**實體檯面**讓產品踩穩。\n"
+                "（product_x 約 0.5、product_y 0.66~0.72）。product_scale 依**產品真實大小**給："
+                "大件(鞋/罐/瓶)0.42~0.50、小件(皮夾/唇膏/耳機/戒指)0.30~0.40——**別把小物放成"
+                "佔半張圖的大箱子**(皮夾被放太大像貨櫃是大忌)；留背景與檯面讓產品有尺度感。\n"
                 "- ★ 接地（整夜第1-2批最大教訓，純棚拍最會浮）：scene_prompt 必須寫"
                 "產品站在**具體實體表面**（marble/oak wood/concrete/brushed metal），"
                 "並寫 'soft diffused contact shadow, short, ambient occlusion at the base, "

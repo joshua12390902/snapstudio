@@ -160,3 +160,19 @@
 
 ---
 （持續更新）
+
+## 15. 兩輪 Workflow 重審迭代：鎖定模式從「會毀產品」到「6/8 紮實」
+
+- **R1→R2**：加 LOCKED_NEGATIVE(通用物理) + plan_scenes 禁道具/禁改造產品風格 + judge 強化抓
+  morph + QC 改信 needs_fix 並「重生用乾淨棚景」。R2 重審：5/8 接受，watch morph、wallet 蛇皮
+  淹滿都修掉(但 wallet 變過大方箱)。
+- **R2→R3**：(1) compose.py 遮罩「先 MaxFilter dilate 再羽化」——羽化會往產品內側吃、去背對細長
+  錶帶易漏，導致 inpaint 碰產品邊緣染色(watch 橘藍塊/wallet 鏽邊/lipstick 接縫)。dilate 補償後
+  watch_p1 變乾淨且 TISSOT logo 清晰可讀。(2) plan_scenes product_scale 依產品真實大小給(小件
+  0.30~0.40)，解 wallet 過大方箱→變乾淨小皮夾。
+- **現況**：watch/wallet/perfume/lipstick/energy_drink/controller 6 品紮實可用；sneaker/earbuds
+  是 reshape 對「腳/耳」的模型天花板(多腿/壞手/浮空/貼臉頰)，非 prompt 可救，待產品決策(導向乾淨
+  locked 擺台 vs 續推 worn)。
+- **方法論收穫**：多 agent 雙視角審查(務實客戶當及格線+完美主義者抓破綻)能穩定指出系統性瑕疵；
+  每輪「審查→改 code→重生→再審」確實收斂。VLM 驅動(judge 抓破綻→重生)+ 最小通用負面詞，比硬列
+  產品專屬規則更符合需求且有效。

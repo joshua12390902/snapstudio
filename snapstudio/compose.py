@@ -145,9 +145,13 @@ def build_scene_inputs(
     preview = Image.new("RGB", canvas, (200, 200, 200))
     preview.paste(fg, (px, py), fg)
 
-    # mask：白底（全要生成）→ 把產品塗黑（保留），再羽化邊界
+    # mask：白底（全要生成）→ 把產品塗黑（保留），再羽化邊界。
+    # 先 dilate（MaxFilter）再羽化：羽化(GaussianBlur)會把鎖定邊界往產品內側吃，加上去背在
+    # 細長/鏤空結構(錶帶鍊節)易漏，導致 inpaint 碰到產品邊緣重繪→染場景色(實測 watch 錶帶橘藍
+    # 色塊、wallet 鏽邊、lipstick 接縫)。先擴張遮罩補償，確保整片產品邊緣都被硬鎖。
+    keep = prod_alpha.filter(ImageFilter.MaxFilter(9))  # ~4px 擴張，補償羽化寬度
     mask = Image.new("L", canvas, 255)
-    mask.paste(Image.new("L", prod_alpha.size, 0), (0, 0), prod_alpha)
+    mask.paste(Image.new("L", canvas, 0), (0, 0), keep)
     if feather > 0:
         mask = mask.filter(ImageFilter.GaussianBlur(feather * max(cw, ch)))
 
