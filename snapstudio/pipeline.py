@@ -229,7 +229,10 @@ class SnapStudio:
         """
         place_override = placement.clamped() if placement is not None else None
         if harmonize is None:
-            harmonize = self.quality == "fine" and not lifestyle  # 情境照預設不融光（保銳利人景）
+            # 預設關 IC-Light 光線融合：實測它會把產品正面品牌字洗糊/扭曲(MONSTER→MONƎTER)，
+            # 而接地是程式三層陰影(compose.paste_back)在做、不靠 IC-Light。保清晰 logo 優先。
+            # 仍可由 UI 勾選或傳 harmonize=True 開啟(會犧牲文字銳利度換光照融合)。
+            harmonize = False
         t_total = time.time()
         timings: dict = {}
 
