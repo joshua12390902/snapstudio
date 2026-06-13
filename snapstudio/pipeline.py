@@ -449,11 +449,13 @@ class SnapStudio:
                         flaw = (v.get("flaw_terms") or "").strip()
                         if flaw:
                             p2.negative_prompt = (plans[i].negative_prompt + ", " + flaw).strip(", ")
-                        # 原場景已被判有破綻(常是道具/風格誘發產品morph)→重生改用乾淨棚景，
-                        # 不再 roll 同一個會誘發 morph 的花場景。
-                        p2.scene_prompt = ("professional product photography, the product on a "
-                                           "clean smooth surface, simple uncluttered softly-lit "
-                                           "studio background, subtle soft contact shadow at the base")
+                        # 原場景已被判有破綻(常是道具碰到產品/誘發 morph)→重生改用「乾淨但仍有質感」
+                        # 的安全場景：產品四周留明顯淨空(杜絕道具再貼上來)，但背景保留質感不死板。
+                        p2.scene_prompt = ("professional product photography, the product centered "
+                                           "with clear empty space around it, on a clean premium "
+                                           "surface (polished marble or warm wood), softly-lit "
+                                           "tasteful blurred background with gentle depth, "
+                                           "subtle soft contact shadow at the base")
                         fixes.append((i, p2))
                 timings["vlm_qc"] = round(time.time() - tqc, 2)
                 if fixes:

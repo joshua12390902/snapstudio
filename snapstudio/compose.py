@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 
 @dataclass
@@ -139,7 +139,10 @@ def build_scene_inputs(
     # (chromatic edge fringe，實測 perfume/罐邊一圈五彩 confetti)。先在擴張環鋪 127 灰，產品蓋回後
     # 只剩產品外一圈中性灰被鎖住，羽化後與生成場景柔和銜接，不再有彩邊。
     rng = np.random.RandomState(seed)
-    noise = (rng.rand(ch, cw, 3) * 255).astype(np.uint8)
+    # 灰階高頻雜訊（三通道同值）：仍是高頻、不會把 inpaint 錨成純色，但邊界羽化處若漏出
+    # 未去噪的底，會是「灰點」而非「彩色 confetti」——根治產品輪廓的彩色雜訊邊暈。
+    gray_noise = (rng.rand(ch, cw, 1) * 255).astype(np.uint8)
+    noise = np.repeat(gray_noise, 3, axis=2)
     init = Image.fromarray(noise, "RGB")
     init.paste((127, 127, 127), (0, 0), keep)
     init.paste(fg, (px, py), fg)
@@ -225,5 +228,14 @@ def paste_back(generated: Image.Image, product: Image.Image,
                 fill=int(255 * min(0.98, shadow_opacity * 1.7)))
             ao = ao.filter(ImageFilter.GaussianBlur(max(2, ph * 0.013)))
             out = Image.composite(dark, out, ao)
+    # 收尾清「產品輪廓外一圈」殘留的彩色高頻雜訊(confetti seam)：取緊貼輪廓外 ~6px 環帶，
+    # 做中值柔化＋去飽和把彩點抹平(只動這圈，不碰產品本體與大背景)。
+    pa = product.split()[-1]
+    ring = ImageChops.subtract(pa.filter(ImageFilter.MaxFilter(13)), pa)
+    if ring.getbbox():
+        med = np.asarray(out.filter(ImageFilter.MedianFilter(5))).astype(np.float32)
+        gv = med.mean(axis=2, keepdims=True)
+        desat = Image.fromarray((med * 0.55 + gv * 0.45).astype("uint8"))  # 去飽和中和彩點
+        out = Image.composite(desat, out, ring)
     out.paste(product, (0, 0), product)
     return out
