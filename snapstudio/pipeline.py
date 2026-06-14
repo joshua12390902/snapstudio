@@ -295,6 +295,13 @@ class SnapStudio:
             self._notify(progress_cb, f"VLM 選最佳參考角度 #{bi + 1}/{len(view_pool)}", 0.12)
         timings["identify"] = round(time.time() - t0, 2)
 
+        # ★關鍵 VRAM 編排：identify/pick_reference 的 VLM(qwen2.5vl:32b ~21GB)用完必須先卸，
+        # 否則接下來 plan_scenes/write_copy 的文字模型(qwen3 ~9-20GB)會與 VLM 同駐爆 24GB →
+        # Ollama 回 500「model failed to load」→ plan_scenes 全敗退 DEFAULT 極簡模板（使用者
+        # 看到的「不管下什麼 prompt 都極簡」根因）。先騰出 VRAM 再做場景企劃。
+        if vlm_card is not None or (resolved_mode == "reshape" and len(view_pool) > 1):
+            self.llm.release_models(wait=True)
+
         self._notify(progress_cb, "場景企劃中", 0.14)
         t0 = time.time()
         plans = list(self.llm.plan_scenes(
@@ -447,15 +454,17 @@ class SnapStudio:
                     if v and v.get("needs_fix"):
                         p2 = plans[i].model_copy()
                         flaw = (v.get("flaw_terms") or "").strip()
-                        if flaw:
-                            p2.negative_prompt = (plans[i].negative_prompt + ", " + flaw).strip(", ")
-                        # 原場景已被判有破綻(常是道具碰到產品/誘發 morph)→重生改用「乾淨但仍有質感」
-                        # 的安全場景：產品四周留明顯淨空(杜絕道具再貼上來)，但背景保留質感不死板。
-                        p2.scene_prompt = ("professional product photography, the product centered "
-                                           "with clear empty space around it, on a clean premium "
-                                           "surface (polished marble or warm wood), softly-lit "
-                                           "tasteful blurred background with gentle depth, "
-                                           "subtle soft contact shadow at the base")
+                        # 重生策略(關鍵)：**保留使用者要的原場景**(陽光花園等)，絕不洗成無菌棚景——
+                        # 破綻多半是「道具貼到產品/材質外溢」，化解靠「產品四周留淨空、道具別碰產品」即可，
+                        # 不需丟掉整個豐富背景。把破綻字眼＋通用「道具碰產品」負面詞加進負面，原場景照生。
+                        sep = ("the hero product stands alone with clear empty breathing room around "
+                               "it, nothing overlapping or touching the product")
+                        p2.scene_prompt = f"{plans[i].scene_prompt}, {sep}"
+                        neg_extra = ("prop touching the product, object overlapping the product, "
+                                     "clutter on or against the product")
+                        p2.negative_prompt = ", ".join(
+                            x for x in (plans[i].negative_prompt, flaw, neg_extra) if x
+                        ).strip(", ")
                         fixes.append((i, p2))
                 timings["vlm_qc"] = round(time.time() - tqc, 2)
                 if fixes:
