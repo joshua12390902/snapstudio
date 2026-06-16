@@ -44,6 +44,8 @@ LOCKED_NEGATIVE = (
     "duplicate product, second product, deformed product, "
     "product material or pattern spreading onto background walls floor or furniture, "
     "irrelevant prop touching or competing with the product, "
+    "plant or prop directly behind the product, plant growing out of the product, "
+    "object merging with the product silhouette, "
     "oversized product filling the whole frame"
 )
 
@@ -213,7 +215,7 @@ class SnapStudio:
                 progress_cb: ProgressCB = None, manual_desc: str | None = None,
                 placement: Placement | None = None, harmonize: bool | None = None,
                 lifestyle: bool = False, angle_images: dict | None = None,
-                mode: str = "auto",
+                mode: str = "auto", bg_ai_free: bool = False,
                 ) -> StudioResult:
         """一鍵全流程：照片 → N 組整合場景成品 + 文案包。
 
@@ -308,6 +310,7 @@ class SnapStudio:
             card, user_brief=user_brief, n=n_plans,
             lifestyle=(lifestyle and resolved_mode == "locked"),
             mode="reshape" if resolved_mode == "reshape" else "locked",
+            bg_ai_free=bg_ai_free,
         ))[:n_plans]
         timings["plan"] = round(time.time() - t0, 2)
 

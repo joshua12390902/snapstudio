@@ -524,13 +524,16 @@ class LLMClient:
 
     def plan_scenes(self, card: ProductCard, user_brief: str,
                     n: int = 3, lifestyle: bool = False,
-                    mode: str = "locked") -> list[ScenePlan]:
+                    mode: str = "locked",
+                    bg_ai_free: bool = False) -> list[ScenePlan]:
         """場景企劃：商品卡 + 口語需求 → N 組可直接餵 diffusion 的方案。
 
         mode="reshape"：穿戴/手持重塑模式，scene_prompt 只描述背景情境＋光線
             （戴/握的取景由 reshape.py 依品類補），不需擺位。
         lifestyle=False：乾淨電商商品背景（無人物）。
         lifestyle=True：情境廣告照，忠實納入使用者描述的人物/模特/場景元素。
+        bg_ai_free=True：「背景全由 AI 決定」——忽略 user_brief 的風格指定，由模型以創意
+            總監身分自由為此商品挑選 N 組風格迥異的高質感背景（仍守產品主角/接地/單光源/道具錯開）。
         """
         if mode == "reshape":
             system = (
@@ -594,19 +597,31 @@ class LLMClient:
                 "'subtle rim light separating the product, crisp silhouette'。\n"
                 "5.【背景美且呼應商品】依商品調性給有層次、有氛圍的虛化背景(精品香水→優雅大理石/紗簾窗光/"
                 "florals；球鞋→街頭工業；3C→現代簡約；食飲→生活餐桌)；可加 1~2 件比產品小且更虛化的陪襯"
-                "道具，但不可碰到/疊在產品上、不可有人物或其他同類/重複商品。除非使用者要純白，否則別給"
-                "空白純色棚景。\n"
+                "道具，但**只能放在產品的左右兩側或虛化後景，嚴禁擺在產品正後方/正上方或與產品輪廓交疊、"
+                "共線**（盆栽擺正後方會像從產品長出來、融成一團，大忌），更不可碰到/疊在產品上；不可有人物"
+                "或其他同類/重複商品。除非使用者要純白，否則別給空白純色棚景。\n"
                 "6.【N 組要有變化】各方案的環境、色調光氛、product_view(front/three_quarter/top，至少帶一個 "
                 "three_quarter)都要明顯不同。\n"
                 "7.【scene_prompt】英文 SDXL prompt，重要元素寫前面，含 'a soft contact shadow grounding "
                 "the product'，結尾加 professional product photography, shallow depth of field。不要描述"
                 "產品本身(已鎖定)、不要把產品說成別的物件。\n"
                 "- negative_prompt：英文(cluttered, busy, extra objects, people, multiple products, "
-                "floating, flat plain background)\n"
+                "floating, flat plain background, prop directly behind product, plant growing out of "
+                "product, object merging with product, prop overlapping product silhouette)\n"
             )
+        if bg_ai_free:
+            brief_line = (
+                "使用者需求：（已選「背景全由 AI 決定」）→ **忽略任何風格指定**，請你以頂尖創意"
+                f"總監身分，依商品本質（讀商品卡的類別/材質/顏色/客群）自由為它設計 {n} 組**風格"
+                "迥異**的高質感背景（如：優雅大理石／溫潤木質／現代水泥／自然花葉光影／精品店暖光／"
+                "戶外黃金時刻 bokeh… 各挑不同世界觀），色溫氛圍各異、別重複、別給空白純色棚景；"
+                "仍嚴守下列產品主角／接地／單光源／道具錯開規則。\n\n"
+            )
+        else:
+            brief_line = f"使用者需求：{user_brief or '（無，請自由發揮）'}\n\n"
         user = (
             f"商品卡：{card.model_dump_json()}\n"
-            f"使用者需求：{user_brief or '（無，請自由發揮）'}\n\n"
+            + brief_line +
             f"請給出 {n} 組風格明顯不同的場景方案，輸出 JSON："
             '{"plans": [{"plan_name": "...", "scene_prompt": "...",'
             ' "negative_prompt": "...", "light_direction": "...",'

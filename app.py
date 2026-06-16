@@ -143,7 +143,7 @@ def _gallery_to_pils(value) -> list:
 
 
 def on_generate(images, brief, num_plans, mode, harmonize, lifestyle,
-                manual_desc, session, progress=gr.Progress()):
+                bg_ai_free, manual_desc, session, progress=gr.Progress()):
     """Tab1 一鍵生成：多張照片 → 商品卡 → N 組方案成品 + 文案（固定精緻檔）。
 
     images：gr.Gallery 多圖上傳。第一張為主圖（識別＋front），其餘當角度池。
@@ -163,6 +163,7 @@ def on_generate(images, brief, num_plans, mode, harmonize, lifestyle,
             manual_desc=(manual_desc or "").strip() or None,
             harmonize=bool(harmonize),
             lifestyle=bool(lifestyle),
+            bg_ai_free=bool(bg_ai_free),
             angle_images=extras or None,
             mode=mode or "auto",
             progress_cb=lambda stage, frac: progress(frac, desc=stage),
@@ -247,6 +248,11 @@ def build_demo() -> gr.Blocks:
                         value=False, label="AI 光線融合（IC-Light）",
                         info="讓商品表面光照與場景一致；較精緻但多約 2s/張",
                     )
+                    bg_ai_chk = gr.Checkbox(
+                        value=False, label="背景全由 AI 決定",
+                        info="忽略上方需求描述的風格，讓 AI 以創意總監身分自選最適合此商品的"
+                             "多樣高質感背景；仍守住產品主角／接地／單光源／道具不擋產品",
+                    )
                     generate_btn = gr.Button("開始生成", variant="primary")
                 with gr.Column(scale=2):
                     mode_status = gr.Markdown("")
@@ -272,7 +278,7 @@ def build_demo() -> gr.Blocks:
         ).then(
             on_generate,
             inputs=[img_in, brief_tb, nplans_slider, mode_radio,
-                    harmonize_chk, lifestyle_chk, manual_tb, session_state],
+                    harmonize_chk, lifestyle_chk, bg_ai_chk, manual_tb, session_state],
             outputs=gen_outputs,
         ).then(
             _btn_on, None, generate_btn, api_visibility="private",
