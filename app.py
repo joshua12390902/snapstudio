@@ -142,8 +142,8 @@ def _gallery_to_pils(value) -> list:
     return pics
 
 
-def on_generate(images, brief, num_plans, mode, harmonize, lifestyle,
-                bg_ai_free, manual_desc, session, progress=gr.Progress()):
+def on_generate(images, brief, num_plans, mode, bg_ai_free,
+                manual_desc, session, progress=gr.Progress()):
     """Tab1 一鍵生成：多張照片 → 商品卡 → N 組方案成品 + 文案（固定精緻檔）。
 
     images：gr.Gallery 多圖上傳。第一張為主圖（識別＋front），其餘當角度池。
@@ -161,8 +161,8 @@ def on_generate(images, brief, num_plans, mode, harmonize, lifestyle,
             user_brief=(brief or "").strip(),
             n_plans=int(num_plans),
             manual_desc=(manual_desc or "").strip() or None,
-            harmonize=bool(harmonize),
-            lifestyle=bool(lifestyle),
+            harmonize=False,
+            lifestyle=False,
             bg_ai_free=bool(bg_ai_free),
             angle_images=extras or None,
             mode=mode or "auto",
@@ -386,15 +386,6 @@ def build_demo() -> gr.Blocks:
                         info="自動＝由 VLM 看圖判斷：香水/罐等剛性→鎖定（像素精準）；"
                              "手錶/戒指/手把等→重塑（戴在身上/握在手中，姿態可重畫）",
                     )
-                    lifestyle_chk = gr.Checkbox(
-                        value=False, label="情境生活照（含人物／實驗性）",
-                        info="⚠ 實驗性：產品鎖在最上層，生成的人體可能被產品遮擋而失真。"
-                             "主打請用預設＝乾淨電商商品背景（無人物，最穩、最像廣告大片）",
-                    )
-                    harmonize_chk = gr.Checkbox(
-                        value=False, label="AI 光線融合（IC-Light）",
-                        info="讓商品表面光照與場景一致；較精緻但多約 2s/張",
-                    )
                     bg_ai_chk = gr.Checkbox(
                         value=False, label="背景全由 AI 決定",
                         info="忽略上方需求描述的風格，讓 AI 以創意總監身分自選最適合此商品的"
@@ -428,7 +419,7 @@ def build_demo() -> gr.Blocks:
         ).then(
             on_generate,
             inputs=[img_in, brief_tb, nplans_slider, mode_radio,
-                    harmonize_chk, lifestyle_chk, bg_ai_chk, manual_tb, session_state],
+                    bg_ai_chk, manual_tb, session_state],
             outputs=gen_outputs,
         ).then(
             _btn_on, None, generate_btn, api_visibility="private",
