@@ -8,9 +8,9 @@
 
 **輸入**：3 張用手機隨手拍的原圖 — 香水就擺在雜亂桌面上（螢幕、線材、耳機盒、喇叭），不同角度、未經整理：
 
-| 隨手拍 ① | 隨手拍 ② | 隨手拍 ③ |
-|:---:|:---:|:---:|
-| <img src="examples/showcase/raw_1.jpg" width="200"> | <img src="examples/showcase/raw_2.jpg" width="200"> | <img src="examples/showcase/raw_3.jpg" width="200"> |
+| 隨手拍 ① | 隨手拍 ② |
+|:---:|:---:|
+| <img src="examples/showcase/raw_1.jpg" width="200"> | <img src="examples/showcase/raw_2.jpg" width="200"> |
 
 **輸出**：下不同口語需求，自動去背 → 產出風格迥異、產品坐進場景（非貼紙浮貼）的電商大圖：
 
@@ -20,7 +20,7 @@
 
 產品永遠是最醒目的主角、站在合理檯面、有程式合成的接地陰影，品牌標籤逐像素清晰。
 
-> 🎬 **完整流程 demo（55 秒）**：[`examples/showcase/demo.mp4`](examples/showcase/demo.mp4) — 上傳 3 張隨手拍 → 真實生成（加速）→ IC-Light A 護字 before/after。
+> 🎬 **完整流程 demo（55 秒）**：[`examples/showcase/demo.mp4`](examples/showcase/demo.mp4) — 上傳隨手拍 → 真實生成（加速）→ IC-Light A 護字 before/after。
 
 ## 功能
 
