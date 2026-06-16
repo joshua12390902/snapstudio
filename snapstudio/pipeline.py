@@ -23,7 +23,7 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 from . import config  # noqa: F401  # 匯入即設定 HF_HUB_OFFLINE 等環境變數
-from .compose import Placement, build_scene_inputs, paste_back
+from .compose import Placement, build_scene_inputs, harmonize_keep_text, paste_back
 from .llm import CopyPack, LLMClient, ProductCard, ScenePlan, fallback_product_class
 
 ProgressCB = Optional[Callable[[str, float], None]]
@@ -190,9 +190,11 @@ class SnapStudio:
                 prompt=f"{plan.scene_prompt}, {plan.light_desc}",
                 width=768, height=768, hires=False, lcm=True, seed=seed,
             ).resize(CANVAS)
-            # 融光只取「場景/環境光」，最後把銳利的原始產品像素再貼回一次，
-            # 確保主角邊界永遠像素級俐落（IC-Light 768 會糊化產品）。
-            shot = paste_back(relit, parts["product"], light_direction=plan.light_direction)
+            # A 護字融光：先把銳利原始產品貼回 relit 背景當底（base，現狀行為），
+            # 再讓產品『表面』吃一點場景光、文字/logo 與輪廓邊保持原始銳利。
+            # 偵測不可靠或例外 → harmonize_keep_text 自動回 base（永不比現狀差）。
+            base = paste_back(relit, parts["product"], light_direction=plan.light_direction)
+            shot = harmonize_keep_text(base, relit, parts["product"])
             t["harmonize"] = round(time.time() - t0, 2)
 
         return shot, parts["preview"], t

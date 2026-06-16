@@ -239,3 +239,54 @@ def paste_back(generated: Image.Image, product: Image.Image,
         out = Image.composite(desat, out, ring)
     out.paste(product, (0, 0), product)
     return out
+
+
+def _label_mask(product_rgba: Image.Image) -> Image.Image | None:
+    """偵測產品上的文字/標籤區 → 羽化單通道遮罩（L，與產品同尺寸）；偵測不可靠回 None。
+    純 CV、零模型下載：借用 reshape 的主色面偵測（對彩色標籤/錶盤已驗證可靠）。"""
+    import cv2
+    from .reshape import _dominant_hue, _face_region
+    rgba = np.asarray(product_rgba)
+    if rgba.ndim == 3 and rgba.shape[2] == 4:
+        alpha = rgba[..., 3]
+        rgb = np.ascontiguousarray(rgba[..., :3])
+    else:
+        alpha = np.full(rgba.shape[:2], 255, np.uint8)
+        rgb = rgba
+    hue = _dominant_hue(rgb)
+    if hue is None:
+        return None
+    res = _face_region(rgb, hue)
+    if res is None:
+        return None
+    fill = res[0]
+    fill = cv2.bitwise_and(fill, fill, mask=(alpha > 8).astype(np.uint8) * 255)  # 限在產品內
+    area = int((fill > 0).sum())
+    prod_area = int((alpha > 8).sum())
+    if prod_area == 0 or area > 0.7 * prod_area:  # 抓到幾乎整個產品 → 視為不可靠
+        return None
+    fill = cv2.erode(fill, np.ones((6, 6), np.uint8))  # 只護文字核心，外圈讓給融光
+    if int((fill > 0).sum()) < 0.002 * rgba.shape[0] * rgba.shape[1]:
+        return None
+    return Image.fromarray(fill, "L").filter(ImageFilter.GaussianBlur(3))  # 羽化成連續權重
+
+
+def harmonize_keep_text(base: Image.Image, relit_full: Image.Image,
+                        product_rgba: Image.Image, alpha: float = 0.45) -> Image.Image:
+    """A 護字：讓產品『表面』吃 IC-Light 場景光，但文字/logo 區與輪廓邊保持原始銳利。
+
+    base = 原始產品貼回 relit 背景（現狀）；relit_full = IC-Light 重打光全圖。
+    在「內縮輪廓 ∖ 文字區」的表面把 base 往 relit 版混 alpha → 產品吃場景光、文字與邊不動。
+    偵測不可靠或任何例外 → 回 base（等同現狀，永不更差，三層 fallback 的最後一層）。"""
+    try:
+        tm = _label_mask(product_rgba)
+        if tm is None:
+            return base
+        pa = product_rgba.split()[-1]
+        interior = pa.filter(ImageFilter.MinFilter(9))         # 內縮 ~4px，保護銳利輪廓邊
+        surface = ImageChops.subtract(interior, tm)            # 產品表面扣掉文字區
+        surface = surface.filter(ImageFilter.GaussianBlur(2))  # 軟邊
+        lit = Image.blend(base, relit_full, alpha)             # 往重打光版靠 alpha
+        return Image.composite(lit, base, surface)
+    except Exception:
+        return base
