@@ -161,7 +161,7 @@ def on_generate(images, brief, num_plans, mode, bg_ai_free,
             user_brief=(brief or "").strip(),
             n_plans=int(num_plans),
             manual_desc=(manual_desc or "").strip() or None,
-            harmonize=False,
+            harmonize=True,   # IC-Light A 護字：產品表面吃場景光、文字/logo 保持銳利（安全+fallback）
             lifestyle=False,
             bg_ai_free=bool(bg_ai_free),
             angle_images=extras or None,
