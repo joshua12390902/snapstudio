@@ -68,8 +68,9 @@ PYTHONPATH=. /workspace/.venv-1/bin/python examples/opt2/gen_round.py <recipe.js
 
 ### LLM 契約鏈（永不因 LLM 掛掉而崩）
 
-`llm.py::LLMClient._structured_call`：端點降級鏈（Big Pickle 遠端 → 本機 Ollama）→
-強制 JSON → pydantic 驗證（`schemas.py`）→ 重試 → 仍失敗套 `DEFAULT_*` 模板。
+`llm.py::LLMClient._structured_call`：端點降級鏈（本機 Ollama qwen3:32b；遠端 Big Pickle 預設關、
+`LLM_USE_REMOTE=1` 才加入鏈首）→ 強制 JSON → pydantic 驗證（`schemas.py`）→ 重試 → 仍失敗套
+`DEFAULT_*` 模板。
 **對外永不拋例外**（`identify_product` 失敗回 None，由 pipeline 退 `_fallback_card`）。
 輸出含**簡體字防線**（`_SIMP_FIXTABLE` 安全轉正體、`_SIMP_DETECT` 命中重試）——本 repo
 一律繁體中文，勿引入簡體字。
@@ -88,8 +89,10 @@ PYTHONPATH=. /workspace/.venv-1/bin/python examples/opt2/gen_round.py <recipe.js
 
 ## Ollama 模型
 
-VLM `qwen2.5vl:32b`、文字本地備援 `qwen3:32b`（皆 q4，~20GB，靠 LLM 階段獨佔 VRAM）；
-文字主力為遠端 Big Pickle。皆 OpenAI 相容，`SNAPSTUDIO_*` 環境變數可覆寫（見 `config.py`）。
+VLM `qwen2.5vl:32b-ctx8k`、**文字主力 `qwen3:32b`（本機）**（皆 q4，~20GB，靠 LLM 階段獨佔
+VRAM）。遠端 Big Pickle（opencode zen）**預設關**（`LLM_USE_REMOTE` 預設 0；實測該推理模型時通時
+斷、常回空 content，不如本機穩），要用再設環境變數=1。皆 OpenAI 相容，`SNAPSTUDIO_*` 可覆寫（見
+`config.py`）。
 
 ## 進行中
 
