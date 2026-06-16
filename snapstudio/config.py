@@ -31,8 +31,13 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 LLM_BASE_URL = os.getenv("SNAPSTUDIO_LLM_BASE_URL", "https://opencode.ai/zen/v1")
 LLM_MODEL = os.getenv("SNAPSTUDIO_LLM_MODEL", "opencode/big-pickle")
 LLM_API_KEY = os.getenv("SNAPSTUDIO_LLM_API_KEY", os.getenv("OPENCODE_API_KEY", ""))
+# 遠端 Big Pickle（opencode zen，免費推理模型）預設「關」：實測它時通時斷、且為推理模型常
+# 回空 content，會偶爾插進降級鏈回空值搗亂 → 不如本機 qwen3:32b 穩。要用再設環境變數=1。
+LLM_USE_REMOTE = os.getenv("SNAPSTUDIO_USE_REMOTE_LLM", "0") == "1"
 OLLAMA_BASE_URL = os.getenv("SNAPSTUDIO_OLLAMA_BASE_URL", "http://localhost:11434/v1")
-OLLAMA_TEXT_MODEL = os.getenv("SNAPSTUDIO_OLLAMA_TEXT_MODEL", "qwen3:14b")
+# 文字主力＝本機 qwen3:32b（20GB，比 14b 明顯更強更聽話，靠 LLM 階段獨佔 VRAM；pipeline 已在
+# identify 後先卸 VLM 騰出 VRAM）。要省速度可環境變數改回 qwen3:14b。
+OLLAMA_TEXT_MODEL = os.getenv("SNAPSTUDIO_OLLAMA_TEXT_MODEL", "qwen3:32b")
 # 用「限制 context 的 32b」兼顧強度與速度：原生 32b 預設 context 太大(模型+ctx≈51GB)→只 24GB
 # 進 GPU、其餘 CPU offload→單次 263s 不能用。實測縮 num_ctx 後 32b 大致進 GPU：8192→29s、
 # 4096→9s，且輸出比 7b 強(會填對 worn_framing)。用 8192 平衡(可吃 1024 圖、輸出完整)。
