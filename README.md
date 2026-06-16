@@ -8,9 +8,9 @@
 
 **輸入**：3 張用手機隨手拍的原圖 — 香水就擺在雜亂桌面上（螢幕、線材、耳機盒、喇叭），不同角度、未經整理：
 
-| 隨手拍 ① 正面 | 隨手拍 ② | 隨手拍 ③ |
+| 隨手拍 ① | 隨手拍 ② | 隨手拍 ③ |
 |:---:|:---:|:---:|
-| <img src="examples/showcase/raw_1_front.jpg" width="200"> | <img src="examples/showcase/raw_2_speaker.jpg" width="200"> | <img src="examples/showcase/raw_3_laptop.jpg" width="200"> |
+| <img src="examples/showcase/raw_1.jpg" width="200"> | <img src="examples/showcase/raw_2.jpg" width="200"> | <img src="examples/showcase/raw_3.jpg" width="200"> |
 
 **輸出**：下不同口語需求，自動去背 → 產出風格迥異、產品坐進場景（非貼紙浮貼）的電商大圖：
 
