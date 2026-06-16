@@ -20,6 +20,8 @@
 
 產品永遠是最醒目的主角、站在合理檯面、有程式合成的接地陰影，品牌標籤逐像素清晰。
 
+> 🎬 **完整流程 demo（55 秒）**：[`examples/showcase/demo.mp4`](examples/showcase/demo.mp4) — 上傳 3 張隨手拍 → 真實生成（加速）→ IC-Light A 護字 before/after。
+
 ## 功能
 
 - **一鍵去背**：rembg（BiRefNet）抓 bbox → SAM2 box-refine，輸出 0% 白暈邊的 RGBA 前景

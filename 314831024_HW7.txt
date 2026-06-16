@@ -1,0 +1,11 @@
+深度生成模型 HW7 — Agent-Driven Integration Project
+專題：SnapStudio — AI 商品攝影棚（一張手機隨手拍 → 整套電商素材，LLM + Diffusion 本機推論）
+
+公開 GitHub Repository（含原始碼、README.md、Workflow Log）：
+https://github.com/joshua12390902/snapstudio
+
+說明：
+- 原始碼 + requirements.txt：repo 根目錄與 snapstudio/
+- README.md：專題標題、系統架構、本地執行說明
+- Workflow Log（Agent 協作紀錄）：docs/WORKFLOW_LOG.md（另有 DEVLOG.md 記錄完整除錯歷程）
+- Demo 影片：314831024_HW7.mp4（另附）

@@ -267,3 +267,101 @@ M1 里程碑當日達成。
 3. **契約先行讓平行成為可能**：凍結 ARCHITECTURE.md 之後，8 個代理
    同時開工而不互相踩腳——人類團隊要開三次會才能做到的事，
    一份寫清楚的介面文件就解決了。
+
+---
+
+## 10. 迭代優化期（6/11–6/16）：多代理迴圈與 Agent 解瓶頸
+
+第 9 節把 v2 雛形拼起來後，進入「使用者實測 → Agent 迭代」的長尾優化。這一期的協作工具
+從「一次性平行建造」升級成 **可程式化的多代理工作流（Workflow）**：用 JS 腳本決定性地
+編排 fan-out（多視角評審）、pipeline（逐品流水）、adversarial verify（找到的問題再派獨立
+agent 反駁），並大量使用 **playwright 實際開瀏覽器看成品 / 截圖驗證**、**ffmpeg 做 demo**。
+
+### 10.1 多代理品質迴圈：找圖 → 生成 → 三視角評審 → 修正
+
+使用者要「幾乎所有展示品都達電商客戶滿意」。主代理開出可重跑的工作流（`examples/review/`）：
+(1) 數個 source-finder agent 上網（Unsplash）找乾淨高解析來源圖、去背；(2) GPU 序列生成；
+(3) **三視角評審 fan-out**——完美主義（品牌總監）／務實客戶／破綻獵人各一 agent 平行打分；
+(4) 綜合 agent 把破綻對應到具體 `file::function` 修法。**工具組合**：Workflow（parallel 評審 +
+pipeline 逐品）+ Bash GPU 生成 + 視覺 agent 讀圖。產出鐵律「**接地陰影必須程式合成、不能靠
+prompt**」→ 固化進 `compose.paste_back` 三層陰影。
+
+### 10.2 雙模式自動路由與重塑（穿戴/手持）
+
+手錶鍊條摺疊去背醜 → 使用者洞見「讓生圖重塑產品戴上手腕」。實作 **IP-Adapter（SDXL
+plus-vit-h）** 保留產品身份重畫姿態（`reshape.py`），並讓 **VLM 看圖自判 `product_class`**
+驅動「剛性→鎖定／穿戴手持→重塑」自動路由（關鍵字僅離線備援）。對抗審查 workflow 抓出 6 個
+真 bug（VLM 回表外類別被壓 rigid、refine 對 reshape 誤走 inpaint…）全修。
+
+### 10.3 ★最硬的除錯：「不管下什麼 prompt 都極簡」三層根因
+
+使用者回報：下「陽光花園」背景永遠是極簡灰棚，prompt 像被無視。這是全專題最深的一次
+debug，靠 **Agent 化的科學方法**逐層剝開（不靠猜）：
+
+- **隔離法（A/B/C）**：先用 agent 直接呼叫 `SceneInpainter` 證明「inpainter 生花園毫無問題」
+  → 鎖定真凶在 full pipeline，而非 prompt 或模型。
+- **攔截可觀測性**：包一層 `_chat_once` 印出每次 LLM 呼叫的 model 與真實例外 → 抓到鐵證
+  `CHAT FAIL qwen3 500 model failed to load` 連續 6 次。
+- **三層根因**：(1) scene_rule 把 `pure white seamless` 無條件加到每個 prompt 洗白；
+  (2) ★**最底層**：`identify_product` 載入的 VLM（~21GB）用完沒卸，接著文字模型載入時與 VLM
+  同駐爆 24GB → Ollama 回 500 → `_structured_call` 靜默退 `DEFAULT_SCENE_PLANS`（寫死的極簡
+  模板）；(3) QC `judge` 一判 needs_fix 就把整個使用者場景換成無菌棚景。
+- **修**：pipeline 在 identify 後、plan 前先 `release_models(wait=True)` 卸 VLM 騰 VRAM；
+  scene_rule 改有條件 + 使用者需求最優先；QC 改為保留原場景只加隔離負面詞。每步都派**獨立
+  視覺 agent 核實**成品真的出現花園 + 產品為主角。
+
+### 10.4 文字模型換 qwen3:32b + 規則瘦身（少硬規則）
+
+使用者多次要求「多用 LLM、少寫硬規則」。查證發現遠端 Big Pickle（opencode zen → GLM/
+deepseek 系推理模型）**時通時斷、常回空 content**，長期其實在用較弱的 14b 備援 → 規則越堆
+越多、甚至用新規則抵消舊規則（soft diffused ↔ visible sunbeam），這是「過度限制」的徵兆。
+**決策**：文字主力改本機 **qwen3:32b**、遠端預設關（`LLM_USE_REMOTE`）、scene_rule 從 62 行
+碎念瘦身成 7 條原則，把判斷交給更強的模型。
+
+### 10.5 前端 premium 改版（研究 workflow + playwright 驗證）
+
+使用者要「設計公司美感」。主代理開 **研究 workflow**：一 agent 上網研究 Linear/Vercel/Stripe
+的設計 tokens、一 agent 查證 Gradio 6.17 主題/CSS 可客製範圍、一 agent 盤點 app.py 結構 →
+綜合成可落地規格。實作自訂 `gr.themes.Base`（暗色攝影棚 + 暖琥珀）。**踩坑**：字體混用
+`GoogleFont`+字串會觸發 gradio 主題比較的 `Font.__eq__` 對字串取 `.name` 崩潰 → 改用
+`launch(head=)` 注入 `<link>` + CSS 變數 `--font`。**用 playwright headless 截圖目視驗證**
+（`networkidle` 不適用 gradio 的常駐 websocket → 改 `domcontentloaded`）。
+
+### 10.6 IC-Light A 護字（feasibility workflow → 純 CV 實作）
+
+使用者要「IC-Light 但保住標籤文字」。主代理開 **可行性 workflow**：查本機文字偵測能力、
+relight 合成注入點、自動 gate 設計。**關鍵澄清**（讀碼後修正前提）：鎖定模式 `paste_back`
+本就把整個產品原像素貼回、IC-Light 只重打背景 → 文字本來就沒被糊。真正價值是讓產品**表面**
+吃場景光。實作 `compose.harmonize_keep_text`：純 CV（借 `reshape._dominant_hue/_face_region`，
+零模型下載）偵測彩色標籤面 → 在「內縮輪廓 ∖ 文字區」把成品往 relit 版混 alpha，**三層
+fallback**（偵測不可靠/例外 → 退回原始貼回，永不更差）。
+
+### 10.7 這一期新解掉的技術瓶頸
+
+| # | 瓶頸 | 診斷方式（Agent 做了什麼） | 解法 |
+|---|---|---|---|
+| 7 | 下任何 prompt 背景都極簡 | A/B/C 隔離 + 攔 `_chat_once` 印例外 → 抓到 500 | identify 後先卸 VLM 騰 VRAM；prompt 有條件化；QC 不洗場景 |
+| 8 | Ollama VLM+文字模型同駐爆 24GB | 對照「隔離跑正常 / full pipeline 退 default」+ log 鐵證 | `release_models(wait=True)` 序列化單卡模型 |
+| 9 | 規則越堆越多、自相矛盾 | 發現新規則在抵消舊規則 | 換更強模型（32b）+ 砍規則，而非繼續加 |
+| 10 | Gradio 主題字體設定崩潰 | 讀 traceback 定位 `Font.__eq__` | 字體改 `launch(head=)` 注入 + CSS `--font` |
+| 11 | 多個 app 殘留互搶 GPU、生成卡 700s | `nvidia-smi`/`ss` 查兩個 app + 兩 ollama runner 佔滿 | 殺重複 app + 卸 ollama；按 port 殺避免 `pkill -f` 自我匹配 |
+
+### 10.8 這一期的關鍵 prompt 範例
+
+```text
+（隔離除錯指令）逐層找出「下任何 prompt 背景都極簡」的真因，不要猜。
+先直接呼叫 SceneInpainter 證明 inpainter 本身能不能生花園（排除模型/prompt），
+再攔截 _chat_once 印出每次 LLM 呼叫的 model 與真實例外，把 full pipeline 與隔離跑的差異列出來。
+```
+```text
+（前端研究 workflow）平行三 agent：一個上網研究 Linear/Vercel/Stripe 等高質感站的設計
+tokens（配色 hex/字體/圓角陰影/留白），一個查 Gradio 6.17 的 theme/CSS 實際可客製到哪、
+哪些做不到（別過度承諾），一個盤點現有 app.py 結構與注入點，最後綜合成可落地的設計規格。
+```
+
+### 心得補充（迭代期）
+
+- **可觀測性優先於猜測**：最深的 bug（VLM 500 退 default）肉眼完全看不出來，是「攔 `_chat_once`
+  印例外」這個 5 行的觀測手段揪出來的。
+- **規則打架 = 該換模型而非加規則**：用新規則抵消舊規則時，根因通常是底層能力不足。
+- **每個成品都派獨立視覺 agent 核實**，不靠主代理自說自話——這是這一期的品質鐵則。
