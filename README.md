@@ -6,11 +6,17 @@
 
 ## 成果展示
 
-同一張隨手拍的香水照，下不同的口語需求，產出風格迥異、產品坐進場景（非貼紙浮貼）的電商大圖：
+**輸入**：3 張用手機隨手拍的原圖 — 香水就擺在雜亂桌面上（螢幕、線材、耳機盒、喇叭），不同角度、未經整理：
 
-| 輸入（隨手拍） | 「陽光 花園」 | 「窗邊灑進陽光」 | 「Loft 工業風」 |
-|:---:|:---:|:---:|:---:|
-| <img src="examples/showcase/input.png" width="200"> | <img src="examples/showcase/hero_sunlit_garden.png" width="200"> | <img src="examples/showcase/window_sunlight.png" width="200"> | <img src="examples/showcase/loft_brick.png" width="200"> |
+| 隨手拍 ① 正面 | 隨手拍 ② | 隨手拍 ③ |
+|:---:|:---:|:---:|
+| <img src="examples/showcase/raw_1_front.jpg" width="200"> | <img src="examples/showcase/raw_2_speaker.jpg" width="200"> | <img src="examples/showcase/raw_3_laptop.jpg" width="200"> |
+
+**輸出**：下不同口語需求，自動去背 → 產出風格迥異、產品坐進場景（非貼紙浮貼）的電商大圖：
+
+| 「陽光 花園」 | 「窗邊灑進陽光」 | 「Loft 工業風」 |
+|:---:|:---:|:---:|
+| <img src="examples/showcase/hero_sunlit_garden.png" width="200"> | <img src="examples/showcase/window_sunlight.png" width="200"> | <img src="examples/showcase/loft_brick.png" width="200"> |
 
 產品永遠是最醒目的主角、站在合理檯面、有程式合成的接地陰影，品牌標籤逐像素清晰。
 
