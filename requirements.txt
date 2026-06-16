@@ -20,10 +20,12 @@ gradio==6.17.3
 openai==2.41.0
 pydantic==2.13.4
 
-# 去背（rembg 走 onnxruntime CPU 推論即可）
+# 去背（rembg 走 onnxruntime；SAM2 邊緣精修走 ultralytics）
 rembg==2.0.69
 onnxruntime==1.23.2
+ultralytics==8.4.37     # matting.py SAM2 box-refine
 
-# 影像/數值
+# 影像/數值（cv2 用於 compose/reshape 的遮罩、標籤偵測等）
+opencv-python-headless==4.13.0.92
 pillow==12.1.1
 numpy==2.2.6

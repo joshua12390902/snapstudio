@@ -120,14 +120,14 @@
 | LLM：Prompt Engineering | 場景企劃將口語需求展開為 SDXL prompt + 負面詞 + 擺位/光向 |
 | LLM：API 整合 / 本機推論 | 文字企劃/文案與 VLM 識別皆走本機 Ollama（qwen3:32b + qwen2.5vl:32b），OpenAI 相容；遠端端點可選、預設關 |
 | Diffusion：客製化 Pipeline | IC-Light 重打光在 diffusers 0.39 重新實作（conv_in 4→8/12 通道、權重 offset 合併、forward 攔截） |
-| Diffusion：推論加速 | 9 通道 inpaint 1024² 約 6–9 s/張；IC-Light 走 LCM-LoRA 8 步 768²；移動主角重生免 LLM |
+| Diffusion：推論加速 | 9 通道 inpaint 1024² 約 8–11 s/張；IC-Light 走 LCM-LoRA 8 步 768²；移動主角重生免 LLM |
 | 互動 UI | Gradio 6 自訂 premium 主題 |
 
 ---
 
 ## 本地執行
 
-**環境需求**：NVIDIA GPU ≥ 24 GB VRAM（RTX 3090 實測）、Python 3.10、CUDA 12.1 驅動、磁碟約 20 GB（權重 + 環境）。
+**環境需求**：NVIDIA GPU ≥ 24 GB VRAM（RTX 3090 實測）、Python 3.10、CUDA 12.1 驅動、磁碟建議 ≥ 20 GB（`download_weights.sh` 預設群組權重約 12 GB + Python 環境；若連同前期探索性權重全裝，`weights/` 可達 ~36 GB）。
 
 ```bash
 # 1. 建立環境
@@ -184,7 +184,7 @@ RTX 3090 實測：
 
 | 階段 | 設定 | 速度 | VRAM 峰值 |
 |---|---|---|---|
-| Inpaint-grounded 生成 | 1024²、32 步、GS 7.5 | 約 6–9 s/張 | ~10 GB |
+| Inpaint-grounded 生成 | 1024²、32 步、GS 7.5（未加速） | 約 8–11 s/張 | ~10 GB |
 | IC-Light 光線融合（A 護字） | 768²、LCM 8 步 | 約 +2 s/張 | ~3.6 GB |
 | 移動主角重生（免 LLM） | 同上 | 約 3.5 s/張 | — |
 

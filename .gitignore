@@ -43,5 +43,12 @@ examples/outputs/watch_worn/honest_overlay.png
 examples/outputs/watch_worn/e2e_anydoor.png
 examples/readme_pic/
 
+# 重建/demo 產物（重跑會生成，不入庫）
+examples/products/sourced/
+examples/outputs/debug/
+examples/demo_run/
+
 # demo 影片為交付物,例外允許追蹤
 !examples/showcase/demo.mp4
+# 繳交用 demo 影片(根目錄),例外允許追蹤
+!314831024_HW7.mp4

@@ -17,7 +17,7 @@
 | 實測代理 | Bash + RTX 3090 | 在本機跑 POC / benchmark，量秒數、FPS、峰值 VRAM，寫進 `results.jsonl` |
 | 評審代理 | 三個獨立 lens（教授／工程／demo） | 對提案獨立評分，禁止互相參考 |
 | 建造代理 | 8 個平行子代理 | 階段三～四：各模組 / UI / 文件平行實作（本文件即出自其中之一） |
-| App 後端 LLM | Big Pickle（GLM-4.6）/ Ollama（qwen3:14b、qwen2.5vl） | 成品 App 內的場景企劃、VLM 商品識別、文案生成 |
+| App 後端 LLM | **本機 Ollama 主力**：文字 `qwen3:32b`、視覺 `qwen2.5vl:32b-ctx8k`；遠端 Big Pickle（opencode zen）為**預設關**的可選降級端點（詳見 §10.4） | 成品 App 內的場景企劃、VLM 商品識別、文案生成 |
 
 貫穿全程的兩條鐵則（都是踩坑後立的，見第 7 節）：
 
@@ -158,7 +158,7 @@ Hyper-SD、TCD 的論文與模型卡）+ 1 個本機實測代理。
 
 **實測結果（RTX 3090）**：768×768、25 步、**3.1 秒/張、峰值 VRAM 3.6GB**；
 皮夾的皮革紋理與縫線完整保留，光向與色溫確實重算
-（`examples/out_warm_window.png`、`examples/out_studio_rim.png`）。
+（佐證程式 `poc/poc_iclight.py`；最終 IC-Light A 護字 before/after 見 `examples/showcase/iclight_ab.png`）。
 M1 里程碑當日達成。
 
 ---
@@ -256,7 +256,7 @@ M1 里程碑當日達成。
 | 11:54 | 專案目錄建立、權重以 wget 預下載 | `weights/` |
 | 12:06 | ARCHITECTURE.md 凍結 | `docs/ARCHITECTURE.md` |
 | 12:27 | `config.py` 落地（離線鐵則固化） | `snapstudio/config.py` |
-| 下午 | IC-Light 0.39 移植跑通（3.1s/張）→ 8 建造代理平行開工 | `poc/poc_iclight.py`、`examples/out_*.png` |
+| 下午 | IC-Light 0.39 移植跑通（3.1s/張）→ 8 建造代理平行開工 | `poc/poc_iclight.py` |
 
 ### 心得：這套協作模式真正值錢的三件事
 

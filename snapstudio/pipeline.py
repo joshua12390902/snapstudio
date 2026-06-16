@@ -225,7 +225,8 @@ class SnapStudio:
             （rigid→鎖定模式像素精準、wearable/handheld→重塑模式戴/握上身）；
             也可手動 "locked"／"reshape" 覆蓋。
         placement：主角擺放手動覆蓋；**None＝由 LLM 美術指導自動決定構圖**（預設）。
-        harmonize：是否做 IC-Light 光線融合；None 時精緻檔開、快速檔關。
+        harmonize：是否做 IC-Light A 護字光線融合；None 時**預設關**（保 logo 清晰），
+            UI 固定開、或顯式傳 harmonize=True 才開。
         lifestyle：情境廣告照（允許人物/模特、忠實照使用者描述）。
         angle_images：額外角度照「角度池」。可為 list[PIL]（多圖上傳，推薦）或
             dict（相容舊版）。連同主圖各去背一次組成 view_pool，N 組方案輪流取用
@@ -233,9 +234,9 @@ class SnapStudio:
         """
         place_override = placement.clamped() if placement is not None else None
         if harmonize is None:
-            # 預設關 IC-Light 光線融合：實測它會把產品正面品牌字洗糊/扭曲(MONSTER→MONƎTER)，
-            # 而接地是程式三層陰影(compose.paste_back)在做、不靠 IC-Light。保清晰 logo 優先。
-            # 仍可由 UI 勾選或傳 harmonize=True 開啟(會犧牲文字銳利度換光照融合)。
+            # 直接呼叫(CLI/library)時預設關 IC-Light：保守、最省時。UI 預設開（A 護字已能護住
+            # 文字/logo，見 compose.harmonize_keep_text）。接地不靠 IC-Light，是程式三層陰影
+            # (compose.paste_back)在做。要開就 UI 勾選或顯式傳 harmonize=True。
             harmonize = False
         t_total = time.time()
         timings: dict = {}
@@ -330,10 +331,10 @@ class SnapStudio:
                                   compact_reference, BARE_SCENE_NEGATIVE)
             from . import wornplace
             framing = framing_for(card, product_class)  # 取景由 VLM 決定（worn_framing）
-            use_anydoor = wornplace.available()
-            self._notify(progress_cb,
-                         "載入場景模型（AnyDoor 路線）" if use_anydoor
-                         else "載入重塑模型（IP-Adapter）", 0.26)
+            # 重塑統一走 IP-Adapter（與 README/ARCHITECTURE 描述一致）。AnyDoor 曾是探索路線，
+            # 已棄用、權重移除；wornplace.available() 本就會回 False，這裡直接定為 False 不留死路徑。
+            use_anydoor = False
+            self._notify(progress_cb, "載入重塑模型（IP-Adapter）", 0.26)
             t0 = time.time()
             self._ensure_reshape()
             timings["load_models"] = round(time.time() - t0, 2)

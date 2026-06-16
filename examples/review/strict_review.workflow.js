@@ -7,8 +7,8 @@ export const meta = {
   ],
 }
 
-// args = [{ name, paths:[...], mode, name_guess }]
-const PRODUCTS = args || []
+// args = [{ name, paths:[...], mode, name_guess }]（容錯：若被當字串傳入則 parse）
+const PRODUCTS = (typeof args === 'string' ? JSON.parse(args) : args) || []
 
 const SHOT_SCHEMA = {
   type: 'object',
@@ -51,8 +51,8 @@ const reviews = await pipeline(
   PRODUCTS,
   async (p) => {
     const [strict, practical] = await parallel([
-      () => agent(reviewPrompt(p, 'strict'), { label: `strict:${p.name}`, phase: 'Review', schema: REVIEW_SCHEMA, agentType: 'Explore' }),
-      () => agent(reviewPrompt(p, 'practical'), { label: `client:${p.name}`, phase: 'Review', schema: REVIEW_SCHEMA, agentType: 'Explore' }),
+      () => agent(reviewPrompt(p, 'strict'), { label: `strict:${p.name}`, phase: 'Review', schema: REVIEW_SCHEMA }),
+      () => agent(reviewPrompt(p, 'practical'), { label: `client:${p.name}`, phase: 'Review', schema: REVIEW_SCHEMA }),
     ])
     return { name: p.name, mode: p.mode, strict, practical }
   }

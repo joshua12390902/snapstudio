@@ -4,15 +4,27 @@
 > 去背 → AI 場景 → 物理合理的重新打光 → 多平台文案。
 > 全程本機推論（RTX 3090），LLM 與 Diffusion 在參數層級互相咬合。
 
+> **⚠️ 現況更新**：本文為**階段二（6/10）凍結的架構設計**，作為當時的介面契約保留；
+> 部分細節於後續迭代演進，**最新現況請見 [WORKFLOW_LOG §10](WORKFLOW_LOG.md) 與
+> [DEVLOG §18](../DEVLOG.md)**。主要變更：
+> - **文字模型**：主力改為**本機 qwen3:32b**；遠端 Big Pickle 降為**預設關**的可選降級端點。
+>   VLM 為本機 `qwen2.5vl:32b-ctx8k`（無 OpenRouter）。
+> - **雙模式自動路由**（VLM 看圖判 `product_class`）：rigid→**鎖定模式**（compose/groundgen）、
+>   wearable/handheld→**重塑模式**（reshape.py，IP-Adapter 重畫戴/握姿態）。
+> - **IC-Light**：從「選配」改為 **UI 預設開 + A 護字**（純 CV 偵測標籤區，產品吃場景光、
+>   文字/logo 保持銳利，三層 fallback）。
+> - **UI**：改為**單頁 premium 自訂主題**（暗色攝影棚 + 暖琥珀），非多分頁。
+> - 新增「**背景全由 AI 決定**」選項。
+
 ## 1. 課程技術要求對應
 
 | 作業要求 | 本專題的具體實現 |
 |---|---|
 | LLM：Prompt Engineering | 場景企劃將口語需求展開為 SDXL prompt + 負面詞 |
-| LLM：API 整合 / 本機推論 | Big Pickle（文字企劃/文案）+ VLM 商品識別（本機 Ollama 或雲端），OpenAI 相容介面可隨時切換 |
+| LLM：API 整合 / 本機推論 | 文字企劃/文案與 VLM 識別皆走**本機 Ollama**（qwen3:32b + qwen2.5vl:32b），OpenAI 相容；遠端端點（Big Pickle）可選、預設關（*迭代後更新，原凍結設計為遠端主力*） |
 | Diffusion：客製化 Pipeline | **IC-Light 重打光管線在 diffusers 0.39 上重新實作**（UNet conv_in 4→8/12 通道、權重 offset 合併、forward 攔截）— 官方碼僅支援 0.27，本專題為新版改寫 |
 | Diffusion：推論加速 | LCM-LoRA 掛載（25 步 → 4-8 步）供「快速預覽 vs 精修輸出」雙檔位 |
-| 互動 UI | Gradio 6.17 多分頁介面 |
+| 互動 UI | Gradio 6.17 單頁 premium 自訂主題（暗色攝影棚；*原凍結設計為多分頁*） |
 
 ## 2. 系統架構與資料流（v2：inpaint-grounded）
 
@@ -127,8 +139,9 @@
 | SDXL base 1.0（借設定檔；RealVisXL 缺檔退路） | HF 快取（已存在） | 27GB | 9.6GB | OpenRAIL++ |
 | LCM-LoRA SD1.5 | `weights/lcm-lora-sdv1-5/` | 135MB | +0 | OpenRAIL-M |
 | rembg（BiRefNet/u2net） | 自動下載（GitHub，不經 HF CDN） | ~180MB | CPU | MIT/Apache |
-| LLM：Big Pickle（GLM-4.6） | API | — | — | 免費端點 |
-| VLM：qwen2.5-vl（Ollama）或 OpenRouter 視覺模型 | API/本機 | — | — | 依供應商 |
+| LLM 文字（主力）：本機 `qwen3:32b`（Ollama, q4） | 本機 | ~20GB | LLM 階段獨佔 | Apache-2.0 |
+| LLM 文字（可選降級，預設關）：遠端 Big Pickle（opencode zen，實測路由到 deepseek 系推理模型） | API | — | — | 免費端點 |
+| VLM：本機 `qwen2.5vl:32b-ctx8k`（Ollama, q4） | 本機 | ~21GB | LLM 階段獨佔 | Apache-2.0 |
 
 > 環境鐵則（已實測）：本機到 HF CDN 長連線會停滯 → 權重一律 `wget -c` 預先下載，
 > 執行一律 `HF_HUB_OFFLINE=1` + `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`。
@@ -136,7 +149,7 @@
 ## 6. 已驗證的技術事實（POC 數據，RTX 3090）
 
 - IC-Light fc 模式在 diffusers 0.39.0.dev0 改寫成功：**768×768、25 步、3.1 秒/張、VRAM 峰值 3.6GB**（`poc/poc_iclight.py`）
-- 商品主體保留度：皮革紋理/縫線完整，光向與色溫確實改變（`examples/out_*.png`）
+- 商品主體保留度：皮革紋理/縫線完整，光向與色溫確實改變（佐證見 `poc/poc_iclight.py`；IC-Light A 護字 before/after 見 `examples/showcase/iclight_ab.png`）
 - SDXL 場景生成：1024²、30 步、約 8-11 秒/張、VRAM 9.6GB（前期已驗證）
 - 已知改進點：u2net 會把鄰近物切進前景 → 換 BiRefNet；fc 背景僅文字近似 → 主線用 fbc
 - 型別陷阱：新建 conv_in 預設 fp32，必須 `.to(unet.dtype)`（已踩過）
