@@ -204,20 +204,167 @@ def _btn_on():
 
 
 # ---------------------------------------------------------------------------
+# 視覺主題：沉靜黑色攝影棚 + 一束暖琥珀（研究 Linear/Vercel/Stripe/攝影棚站而定）
+# ---------------------------------------------------------------------------
+_AMBER = gr.themes.Color(
+    c50="#FCF3E3", c100="#FAE7C7", c200="#F6D69D", c300="#F3C97E",
+    c400="#F1C06E", c500="#F4B860", c600="#D89A45", c700="#A9762F",
+    c800="#7A5320", c900="#4D3413", c950="#2A1C0A",
+)
+_INK = gr.themes.Color(
+    c50="#EDEDED", c100="#D6D6D8", c200="#B6B6BA", c300="#8A8A8F",
+    c400="#6A6A6F", c500="#4A4A4E", c600="#3A3A3D", c700="#262629",
+    c800="#161618", c900="#0F0F10", c950="#0A0A0B",
+)
+
+
+class SnapStudioTheme(gr.themes.Base):
+    def __init__(self) -> None:
+        super().__init__(
+            primary_hue=_AMBER, secondary_hue=_AMBER, neutral_hue=_INK,
+            text_size=gr.themes.sizes.text_md,
+            spacing_size=gr.themes.sizes.spacing_md,
+            radius_size=gr.themes.sizes.radius_md,
+            # 字體不走 theme.font（混用 GoogleFont+字串會觸發 gradio 主題比較的 __eq__ 崩潰），
+            # 改由 launch(head=SNAP_HEAD) 注入 <link> + CSS 變數 --font 設定，見下。
+        )
+        super().set(
+            body_background_fill="#0A0A0B", body_background_fill_dark="#0A0A0B",
+            body_text_color="#EDEDED", body_text_color_dark="#EDEDED",
+            body_text_color_subdued="#8A8A8F", body_text_color_subdued_dark="#8A8A8F",
+            background_fill_primary="#0A0A0B", background_fill_primary_dark="#0A0A0B",
+            background_fill_secondary="#161618", background_fill_secondary_dark="#161618",
+            color_accent="#F4B860", color_accent_soft="#262629",
+            border_color_primary="#262629", border_color_primary_dark="#262629",
+            border_color_accent="#F4B860",
+            link_text_color="#F4B860", link_text_color_hover="#F1C06E",
+            link_text_color_dark="#F4B860", link_text_color_hover_dark="#F1C06E",
+            block_background_fill="#161618", block_background_fill_dark="#161618",
+            block_border_width="1px", block_border_color="#262629",
+            block_border_color_dark="#262629", block_radius="12px", block_padding="20px",
+            block_shadow="inset 0 0 0 1px rgba(255,255,255,0.05)",
+            block_shadow_dark="inset 0 0 0 1px rgba(255,255,255,0.05)",
+            block_label_background_fill="#161618", block_label_text_color="#8A8A8F",
+            block_label_text_weight="500", block_label_radius="8px",
+            block_title_text_color="#EDEDED", block_title_text_weight="600",
+            block_title_text_size="14px",
+            block_info_text_color="#8A8A8F", block_info_text_size="12px",
+            layout_gap="16px", panel_background_fill="#161618", panel_border_width="1px",
+            container_radius="16px",
+            input_background_fill="#0F0F10", input_background_fill_dark="#0F0F10",
+            input_background_fill_focus="#161618",
+            input_border_color="#262629", input_border_color_focus="#F4B860",
+            input_border_color_hover="#3A3A3D", input_border_width="1px",
+            input_radius="8px", input_shadow="none",
+            input_shadow_focus="0 0 0 2px rgba(244,184,96,0.40)",
+            input_placeholder_color="#6A6A6F", input_text_size="14px",
+            button_primary_background_fill="#F4B860",
+            button_primary_background_fill_hover="#F1C06E",
+            button_primary_background_fill_dark="#F4B860",
+            button_primary_background_fill_hover_dark="#F1C06E",
+            button_primary_text_color="#0A0A0B", button_primary_text_color_hover="#0A0A0B",
+            button_primary_border_color="#F4B860",
+            button_primary_shadow="0 0 0 1px rgba(244,184,96,0.40), 0 8px 24px rgba(244,184,96,0.15)",
+            button_primary_shadow_hover="0 0 0 1px rgba(244,184,96,0.55), 0 10px 28px rgba(244,184,96,0.22)",
+            button_secondary_background_fill="#161618",
+            button_secondary_background_fill_hover="#1E1E21",
+            button_secondary_text_color="#EDEDED",
+            button_secondary_border_color="#262629",
+            button_secondary_border_color_hover="#3A3A3D",
+            button_large_radius="8px", button_large_padding="10px 16px",
+            button_large_text_size="14px", button_large_text_weight="600",
+            button_border_width="1px",
+            button_transition="all 0.18s cubic-bezier(0.4,0,0.2,1)",
+            button_transform_hover="translateY(-1px)", button_transform_active="translateY(0px)",
+            slider_color="#F4B860", loader_color="#F4B860",
+            error_background_fill="#2A1414", error_border_color="#7A2E2E",
+            error_text_color="#F0A0A0", code_background_fill="#0F0F10",
+            prose_text_size="16px", prose_header_text_weight="600",
+            shadow_drop="0 1px 2px rgba(0,0,0,0.4)", shadow_drop_lg="0 8px 24px rgba(0,0,0,0.45)",
+        )
+
+
+SNAP_THEME = SnapStudioTheme()
+
+SNAP_CSS = """
+.gradio-container {
+  max-width: 1280px !important; margin: auto !important;
+  padding: 28px 24px 64px !important;
+  --font: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  background:
+    radial-gradient(1100px 520px at 50% -8%, rgba(244,184,96,0.055), transparent 62%),
+    #0A0A0B !important;
+}
+.snap-hero-title, .prose h1, .prose h2, .prose h3, .section-header {
+  font-family: 'Space Grotesk', ui-sans-serif, sans-serif !important;
+}
+#snap-hero { margin: 4px 2px 26px; border: none !important; background: transparent !important; }
+.snap-badge {
+  display: inline-block; font-size: 12px; letter-spacing: .04em; color: #F4B860;
+  border: 1px solid rgba(244,184,96,0.35); border-radius: 999px;
+  padding: 5px 13px; margin-bottom: 18px; background: rgba(244,184,96,0.06);
+}
+.snap-hero-title {
+  font-family: 'Space Grotesk', ui-sans-serif, sans-serif;
+  font-size: 40px; line-height: 1.1; font-weight: 600; letter-spacing: -0.02em;
+  margin: 0 0 10px; color: #EDEDED;
+}
+.snap-hero-title .accent { color: #F4B860; }
+.snap-hero-sub { font-size: 16px; line-height: 1.6; color: #8A8A8F; margin: 0; max-width: 640px; }
+.snap-card {
+  background: #161618 !important; border: 1px solid #262629 !important;
+  border-radius: 16px !important; padding: 22px !important;
+  animation: snapfade .4s cubic-bezier(.4,0,.2,1) both;
+}
+@keyframes snapfade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+#snap-upload { border-radius: 12px !important; }
+#snap-generate-btn { width: 100% !important; margin-top: 6px; }
+#snap-gallery img {
+  transition: transform .25s cubic-bezier(.4,0,.2,1), filter .25s; border-radius: 10px;
+}
+#snap-gallery img:hover { transform: scale(1.015); filter: brightness(1.06); }
+#snap-mode-status p {
+  display: inline-block; font-size: 13px; color: #F4B860; margin: 0;
+  background: rgba(244,184,96,0.08); border: 1px solid rgba(244,184,96,0.25);
+  border-radius: 999px; padding: 4px 12px;
+}
+footer { opacity: .5; }
+"""
+
+# Google Fonts 經 <head> 注入（繞過 theme.font 的 __eq__ 崩潰）；外網不可達時瀏覽器自動退系統字
+SNAP_HEAD = (
+    "<link rel='preconnect' href='https://fonts.googleapis.com'>"
+    "<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>"
+    "<link rel='stylesheet' href='https://fonts.googleapis.com/css2?"
+    "family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&"
+    "family=JetBrains+Mono:wght@400;500&display=swap'>"
+)
+
+
+# ---------------------------------------------------------------------------
 # 版面（gradio 6：theme/css 移到 launch()，此處只建結構）
 # ---------------------------------------------------------------------------
 def build_demo() -> gr.Blocks:
     with gr.Blocks(title="SnapStudio — AI 商品攝影棚") as demo:
-        gr.Markdown("# SnapStudio — AI 商品攝影棚")
+        gr.HTML(
+            "<span class='snap-badge'>本機推論 · 單張 RTX 3090</span>"
+            "<h1 class='snap-hero-title'>Snap<span class='accent'>Studio</span>"
+            " — AI 商品攝影棚</h1>"
+            "<p class='snap-hero-sub'>一張手機商品照，自動去背、識別、企劃打光，"
+            "生成電商大片與多平台文案。</p>",
+            elem_id="snap-hero",
+        )
         session_state = gr.State(None)
 
         with gr.Tab("一鍵攝影棚"):
             with gr.Row():
-                with gr.Column(scale=1):
+                with gr.Column(scale=1, elem_id="snap-controls",
+                               elem_classes=["snap-card"]):
                     img_in = gr.Gallery(
                         label="商品照片（可拖多張：第一張為主圖，其餘當不同角度）",
                         type="pil", interactive=True, columns=4, height=300,
-                        object_fit="contain",
+                        object_fit="contain", elem_id="snap-upload",
                     )
                     gr.Markdown(
                         "丟同一產品的多張角度照（正面＋3/4 側＋俯視…），系統自動讓"
@@ -253,9 +400,11 @@ def build_demo() -> gr.Blocks:
                         info="忽略上方需求描述的風格，讓 AI 以創意總監身分自選最適合此商品的"
                              "多樣高質感背景；仍守住產品主角／接地／單光源／道具不擋產品",
                     )
-                    generate_btn = gr.Button("開始生成", variant="primary")
-                with gr.Column(scale=2):
-                    mode_status = gr.Markdown("")
+                    generate_btn = gr.Button("開始生成", variant="primary",
+                                             size="lg", elem_id="snap-generate-btn")
+                with gr.Column(scale=2, elem_id="snap-outputs",
+                               elem_classes=["snap-card"]):
+                    mode_status = gr.Markdown("", elem_id="snap-mode-status")
                     card_json = gr.JSON(label="商品卡（VLM 自動識別）")
                     manual_tb = gr.Textbox(
                         label="手動商品描述（選填，覆寫自動識別）",
@@ -265,6 +414,7 @@ def build_demo() -> gr.Blocks:
                     gallery = gr.Gallery(
                         label="成品方案（點選可切換下方文案）",
                         columns=2, height=420, object_fit="contain",
+                        elem_id="snap-gallery",
                     )
                     copy_tb = gr.Textbox(
                         label="文案包", lines=12, buttons=["copy"],
@@ -294,8 +444,9 @@ demo = build_demo()
 
 if __name__ == "__main__":
     demo.launch(
-        theme=gr.themes.Soft(),
-        css=".gradio-container {max-width: 1400px !important; margin: auto;}",
+        theme=SNAP_THEME,
+        css=SNAP_CSS,
+        head=SNAP_HEAD,
         footer_links=["gradio"],
         show_error=True,
     )
