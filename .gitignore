@@ -42,3 +42,6 @@ examples/outputs/watch_worn/wrist_perp_*.png
 examples/outputs/watch_worn/honest_overlay.png
 examples/outputs/watch_worn/e2e_anydoor.png
 examples/readme_pic/
+
+# demo 影片為交付物,例外允許追蹤
+!examples/showcase/demo.mp4
