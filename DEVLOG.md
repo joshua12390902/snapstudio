@@ -207,3 +207,40 @@
   - 彩色邊暈：**次知覺等級**——破綻獵人用像素測色度(背景3.5 vs 接縫17)仍報，但務實/完美視角都判乾淨採用。追到此屬過擬合鑑識 agent，非使用者的電商標準。
   - 根因多指向 matting.py 對細長/複雜輪廓的覆蓋——屬核心改動、風險高、收益遞減。
 - **可重用工具**：examples/review/{source_finder,review3,gen_sourced}——可隨時再跑更多迴圈。
+
+## 18.「不管下什麼 prompt 都極簡」——三層根因 + 改用 32b + 規則瘦身
+
+- **使用者回報**：下 brief（如『陽光 花園』『窗戶灑進陽光』）背景永遠是極簡灰棚，prompt 像被無視。
+- **診斷方法（不靠猜）**：攔截 `_chat_once` 印出真實例外 + A/B/C 對照（先用直接呼叫 SceneInpainter
+  證明「inpainter 生花園毫無問題」→ 鎖定真凶在 full pipeline，而非 prompt 或 inpaint 本身）。
+- **三層根因（由淺到深）**：
+  1. `plan_scenes` scene_rule 把 `pure white RGB 255 255 255 seamless` **無條件**加到每個
+     scene_prompt 結尾 → 純白把豐富場景洗白。修：改成只有使用者明確要純白才寫，否則禁出現
+     white/seamless/studio 字眼，並把「忠實反映使用者需求元素」設最高優先。
+  2. **（最底層、最關鍵）VRAM 500 陷阱**：`identify_product` 載入 VLM `qwen2.5vl:32b`（~21GB）
+     用完**沒卸**，接著 `plan_scenes`/`write_copy` 要 Ollama 載 qwen3 文字模型（~9-20GB）→ 同駐爆
+     24GB → Ollama 回 `500 model failed to load` → `_structured_call` 靜默吞例外回 None →
+     `plan_scenes` 退 `DEFAULT_SCENE_PLANS`（寫死的 minimalist seamless gray）。隔離跑沒 VLM 卡著
+     就正常，極難察覺。修：pipeline 在 identify 後、plan_scenes 前先 `release_models(wait=True)` 卸
+     VLM 騰 VRAM。log 鐵證：連 6 次 `CHAT FAIL 500`，且輸出逐字等於硬編碼模板。
+  3. QC `judge_product_shot` 判 needs_fix 時，原本把**整個使用者場景**換成無菌棚景 prompt → 洗掉
+     花園。修：保留原 scene_prompt，只加「道具別碰產品」隔離負面詞；judge 也澄清「豐富背景不是
+     破綻，只有道具貼到/壓到產品才算」，避免誤判豐富背景而觸發重生。
+- **接著做品質升級（每步都派獨立 Claude 視覺 agent 核實）**：
+  - 產品主角化：product_scale 偏 hero、產品須為全圖最醒目、道具退陪襯（更小更虛、不喧賓奪主）。
+  - 擺位合理：嚴禁產品擺地面/草地，必須站在正下方抬高檯面（agent 抓到「香水擺戶外地上」）。
+  - 淺/逆光背景產品要跳出來：加 rim light 分離輪廓、正前方淨空（agent 抓到「淺瓶配淺磚牆糊在一起」）。
+  - 使用者點名的光要看得見：brief 寫『窗戶灑進陽光』卻被先前「一律 soft diffused」(防浮空) 壓成平光
+    → 加規則「點名光線現象時寫成 visible sunbeams/god rays，不降級」。實測 sun_1 出現明顯窗光。
+- **Big Pickle 真相**：遠端文字主力 `opencode.ai/zen` 的 `big-pickle`（實際路由到 deepseek-v4-flash）
+  並非掛了——網路通、會回應，但它是**推理模型常回空 content**、且時通時斷，`_ensure_pickle` 探測常
+  誤判成不可用 → 長期其實在用備胎 14b（笨 → 規則越堆越多）。
+- **收斂（呼應使用者「少寫硬規則」）**：(1) `OLLAMA_TEXT_MODEL` 14b→**qwen3:32b**（本機、更聽話）；
+  (2) 新增 `LLM_USE_REMOTE` 開關**預設關**飄忽的遠端；(3) scene_rule 從 62 行碎念**瘦身成 7 條核心原則**
+  （主角/接地單光源/忠實 brief/對比/背景呼應/變化/格式），把判斷交給更強的模型。實測 32b+瘦身規則
+  對『窗戶灑進陽光』→ 兩方案皆桌面+窗光(PLAN1 direct sunbeam)+植物、產品為主角、無退步。
+- **代價/取捨**：32b 較慢（2 方案全流程 ~467s，約 14b 兩倍），但更聽話、規則打架少。已做成環境變數
+  `SNAPSTUDIO_OLLAMA_TEXT_MODEL` 可切；預設 32b（品質優先）。
+- **教訓**：① 任何「輸出變成 DEFAULT 模板」的詭異現象，先查 Ollama 是否 VLM+文字模型同駐 500；
+  ② 規則越堆越多、甚至用新規則抵消舊規則（soft diffused ↔ visible sunbeam），是「過度限制」的徵兆，
+  解法是換更強模型 + 砍規則，而非繼續加。
